@@ -40,23 +40,31 @@ export const AuthProvider = ({ children }) => {
     try {
       // Check if user exists in localStorage
       const users = JSON.parse(localStorage.getItem('users') || '[]');
-      const user = users.find(u => u.email === email);
       
-      if (user && user.password === password) {
-        // Remove password from user object before storing in state
-        const { password: _, ...userWithoutPassword } = user;
-        setCurrentUser(userWithoutPassword);
-        setIsAuthenticated(true);
-        localStorage.setItem('user', JSON.stringify(userWithoutPassword));
-        
-        // Dispatch a custom event to notify other components
-        window.dispatchEvent(new Event('userDataChanged'));
-        
-        setIsLoading(false);
-        return userWithoutPassword;
-      } else {
-        throw new Error('Invalid email or password');
+      // Find user by email (case insensitive)
+      const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+      
+      if (!user) {
+        throw new Error('User not found');
       }
+      
+      // Check password
+      if (user.password !== password) {
+        throw new Error('Invalid password');
+      }
+      
+      // Remove password from user object before storing in state
+      const { password: _, ...userWithoutPassword } = user;
+      
+      // Set current user
+      setCurrentUser(userWithoutPassword);
+      setIsAuthenticated(true);
+      
+      // Save to localStorage
+      localStorage.setItem('user', JSON.stringify(userWithoutPassword));
+      
+      setIsLoading(false);
+      return userWithoutPassword;
     } catch (err) {
       setError(err.message);
       setIsLoading(false);
@@ -79,8 +87,8 @@ export const AuthProvider = ({ children }) => {
       // Get existing users
       const users = JSON.parse(localStorage.getItem('users') || '[]');
       
-      // Check if email is already in use
-      if (users.some(user => user.email === email)) {
+      // Check if email is already in use (case insensitive)
+      if (users.some(user => user.email.toLowerCase() === email.toLowerCase())) {
         throw new Error('Email is already in use');
       }
       
