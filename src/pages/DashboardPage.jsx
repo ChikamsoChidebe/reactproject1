@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTrading } from '../contexts/TradingContext';
 import { useMarketData } from '../contexts/MarketDataContext';
+import PortfolioChart from '../components/charts/PortfolioChart';
 
 const DashboardPage = () => {
   const { currentUser } = useAuth();
@@ -10,6 +11,7 @@ const DashboardPage = () => {
   const { marketData } = useMarketData();
   const [activeTab, setActiveTab] = useState('overview');
   const [transactions, setTransactions] = useState([]);
+  const [refreshKey, setRefreshKey] = useState(0);
   const navigate = useNavigate();
   
   // Redirect if not logged in
@@ -19,9 +21,33 @@ const DashboardPage = () => {
     }
     
     // Load transactions
-    const savedTransactions = JSON.parse(localStorage.getItem('transactions') || '[]');
-    const userTransactions = savedTransactions.filter(t => t.userId === currentUser?.id);
-    setTransactions(userTransactions);
+    const loadTransactions = () => {
+      const savedTransactions = JSON.parse(localStorage.getItem('transactions') || '[]');
+      const userTransactions = savedTransactions.filter(t => t.userId === currentUser?.id);
+      setTransactions(userTransactions);
+    };
+    
+    loadTransactions();
+    
+    // Listen for changes in localStorage
+    const handleStorageChange = () => {
+      loadTransactions();
+      setRefreshKey(prevKey => prevKey + 1);
+    };
+    
+    // Listen for custom event
+    window.addEventListener('userDataChanged', handleStorageChange);
+    
+    // Poll for changes
+    const intervalId = setInterval(() => {
+      loadTransactions();
+      setRefreshKey(prevKey => prevKey + 1);
+    }, 3000);
+    
+    return () => {
+      window.removeEventListener('userDataChanged', handleStorageChange);
+      clearInterval(intervalId);
+    };
   }, [currentUser, navigate]);
   
   // Calculate total portfolio value
@@ -175,8 +201,8 @@ const DashboardPage = () => {
                 <button className="px-3 py-1 text-xs rounded-full text-gray-600">All</button>
               </div>
             </div>
-            <div className="h-64 bg-gray-100 rounded flex items-center justify-center">
-              <p className="text-gray-500">Portfolio chart will be displayed here</p>
+            <div className="h-64 bg-gray-50 rounded">
+              <PortfolioChart timeframe="1D" key={`portfolio-${refreshKey}`} />
             </div>
           </div>
           

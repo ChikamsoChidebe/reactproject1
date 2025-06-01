@@ -40,14 +40,18 @@ export const AuthProvider = ({ children }) => {
     try {
       // Check if user exists in localStorage
       const users = JSON.parse(localStorage.getItem('users') || '[]');
-      const user = users.find(u => u.email === email && u.password === password);
+      const user = users.find(u => u.email === email);
       
-      if (user) {
+      if (user && user.password === password) {
         // Remove password from user object before storing in state
-        const { password, ...userWithoutPassword } = user;
+        const { password: _, ...userWithoutPassword } = user;
         setCurrentUser(userWithoutPassword);
         setIsAuthenticated(true);
         localStorage.setItem('user', JSON.stringify(userWithoutPassword));
+        
+        // Dispatch a custom event to notify other components
+        window.dispatchEvent(new Event('userDataChanged'));
+        
         setIsLoading(false);
         return userWithoutPassword;
       } else {
@@ -89,7 +93,8 @@ export const AuthProvider = ({ children }) => {
         accountId: `CR-${Math.floor(100000 + Math.random() * 900000)}`,
         accountType: 'Standard',
         joinDate: new Date().toISOString().split('T')[0],
-        twoFactorEnabled: false
+        twoFactorEnabled: false,
+        cashBalance: 10000 // Initial balance
       };
       
       // Save to users array
@@ -103,6 +108,9 @@ export const AuthProvider = ({ children }) => {
       setCurrentUser(userWithoutPassword);
       setIsAuthenticated(true);
       localStorage.setItem('user', JSON.stringify(userWithoutPassword));
+      
+      // Dispatch a custom event to notify other components
+      window.dispatchEvent(new Event('userDataChanged'));
       
       setIsLoading(false);
       return userWithoutPassword;

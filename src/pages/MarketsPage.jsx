@@ -1,66 +1,109 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useMarketData } from '../contexts/MarketDataContext';
+import MarketItem from '../components/market/MarketItem';
 
 const MarketsPage = () => {
-  // Sample market data
-  const marketData = [
-    { symbol: 'AAPL', name: 'Apple Inc.', price: 178.72, change: 2.45, changePercent: 1.39 },
-    { symbol: 'MSFT', name: 'Microsoft Corp.', price: 334.12, change: -1.23, changePercent: -0.37 },
-    { symbol: 'GOOGL', name: 'Alphabet Inc.', price: 134.99, change: 0.87, changePercent: 0.65 },
-    { symbol: 'AMZN', name: 'Amazon.com Inc.', price: 145.24, change: 3.21, changePercent: 2.26 },
-    { symbol: 'TSLA', name: 'Tesla Inc.', price: 248.50, change: -5.67, changePercent: -2.23 }
+  const { marketData } = useMarketData();
+  const [activeCategory, setActiveCategory] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Define market categories
+  const categories = [
+    { id: 'all', name: 'All Markets' },
+    { id: 'stocks', name: 'Stocks' },
+    { id: 'crypto', name: 'Crypto' },
+    { id: 'forex', name: 'Forex' },
+    { id: 'commodities', name: 'Commodities' },
+    { id: 'indices', name: 'Indices' }
   ];
-
+  
+  // Filter assets based on category and search query
+  const getFilteredAssets = () => {
+    let assets = [];
+    
+    if (activeCategory === 'all') {
+      Object.keys(marketData).forEach(category => {
+        assets = [...assets, ...marketData[category]];
+      });
+    } else {
+      assets = marketData[activeCategory] || [];
+    }
+    
+    // Apply search filter if query exists
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      assets = assets.filter(asset => 
+        asset.symbol.toLowerCase().includes(query) || 
+        asset.name.toLowerCase().includes(query)
+      );
+    }
+    
+    return assets;
+  };
+  
+  const filteredAssets = getFilteredAssets();
+  
   return (
-    <div>
+    <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-6">Markets</h1>
       
-      <div className="mb-6">
-        <div className="flex space-x-4 border-b">
-          <button className="py-2 px-4 border-b-2 border-blue-500 text-blue-600 font-medium">Stocks</button>
-          <button className="py-2 px-4 text-gray-500 hover:text-gray-700">Forex</button>
-          <button className="py-2 px-4 text-gray-500 hover:text-gray-700">Crypto</button>
-          <button className="py-2 px-4 text-gray-500 hover:text-gray-700">Commodities</button>
-          <button className="py-2 px-4 text-gray-500 hover:text-gray-700">Indices</button>
+      {/* Search and Filter */}
+      <div className="mb-8">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="relative flex-grow max-w-md">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+              </svg>
+            </div>
+            <input
+              type="text"
+              className="pl-10 pr-4 py-2 border border-gray-300 rounded-md w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Search markets..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          
+          <div className="flex overflow-x-auto pb-2 md:pb-0 hide-scrollbar">
+            {categories.map(category => (
+              <button
+                key={category.id}
+                className={`px-4 py-2 rounded-md whitespace-nowrap mr-2 ${
+                  activeCategory === category.id
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                }`}
+                onClick={() => setActiveCategory(category.id)}
+              >
+                {category.name}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
       
-      <div className="bg-white rounded shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Symbol</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Change</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">% Change</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {marketData.map((item) => (
-              <tr key={item.symbol} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{item.symbol}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">{item.name}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-right">${item.price.toFixed(2)}</td>
-                <td className={`px-6 py-4 whitespace-nowrap text-sm text-right ${
-                  item.change >= 0 ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {item.change >= 0 ? '+' : ''}{item.change.toFixed(2)}
-                </td>
-                <td className={`px-6 py-4 whitespace-nowrap text-sm text-right ${
-                  item.changePercent >= 0 ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {item.changePercent >= 0 ? '+' : ''}{item.changePercent.toFixed(2)}%
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <button className="text-blue-600 hover:text-blue-900 mr-4">Chart</button>
-                  <button className="text-green-600 hover:text-green-900">Trade</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {/* Market Grid */}
+      {filteredAssets.length > 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {filteredAssets.map(asset => (
+            <MarketItem key={asset.symbol} asset={asset} />
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-12">
+          <p className="text-gray-500 text-lg">No markets found matching your criteria.</p>
+          <button 
+            className="mt-4 text-blue-600 hover:underline"
+            onClick={() => {
+              setSearchQuery('');
+              setActiveCategory('all');
+            }}
+          >
+            Clear filters
+          </button>
+        </div>
+      )}
     </div>
   );
 };

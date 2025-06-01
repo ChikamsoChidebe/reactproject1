@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import AdminDashboardCharts from '../components/charts/AdminDashboardCharts';
 
 const AdminPage = () => {
   const { currentUser } = useAuth();
@@ -48,6 +49,15 @@ const AdminPage = () => {
     });
     
     setUsers(updatedUsers);
+    
+    // Find and update the current user in localStorage if they're logged in
+    const currentLoggedInUser = JSON.parse(localStorage.getItem('user') || '{}');
+    if (currentLoggedInUser.id === selectedUser.id) {
+      currentLoggedInUser.cashBalance = parseFloat(selectedUser.cashBalance || 0) + parseFloat(amount);
+      localStorage.setItem('user', JSON.stringify(currentLoggedInUser));
+    }
+    
+    // Update all users in localStorage
     localStorage.setItem('users', JSON.stringify([...updatedUsers, { email: 'admin@credox.com', isAdmin: true }]));
     
     // Add to transaction history
@@ -63,6 +73,9 @@ const AdminPage = () => {
     
     const transactions = JSON.parse(localStorage.getItem('transactions') || '[]');
     localStorage.setItem('transactions', JSON.stringify([transaction, ...transactions]));
+    
+    // Dispatch event to notify other components
+    window.dispatchEvent(new Event('userDataChanged'));
     
     setAmount('');
     alert(`Successfully updated ${selectedUser.name}'s balance`);
@@ -86,6 +99,19 @@ const AdminPage = () => {
     });
     
     setUsers(updatedUsers);
+    
+    // Find and update the current user in localStorage if they're logged in
+    const currentLoggedInUser = JSON.parse(localStorage.getItem('user') || '{}');
+    if (currentLoggedInUser.id === transaction.userId) {
+      if (transaction.type === 'deposit') {
+        currentLoggedInUser.cashBalance = parseFloat(currentLoggedInUser.cashBalance || 0) + parseFloat(transaction.amount);
+      } else {
+        currentLoggedInUser.cashBalance = parseFloat(currentLoggedInUser.cashBalance || 0) - parseFloat(transaction.amount);
+      }
+      localStorage.setItem('user', JSON.stringify(currentLoggedInUser));
+    }
+    
+    // Update all users in localStorage
     localStorage.setItem('users', JSON.stringify([...updatedUsers, { email: 'admin@credox.com', isAdmin: true }]));
     
     // Remove from pending and add to completed transactions
@@ -102,6 +128,9 @@ const AdminPage = () => {
     
     const transactions = JSON.parse(localStorage.getItem('transactions') || '[]');
     localStorage.setItem('transactions', JSON.stringify([completedTransaction, ...transactions]));
+    
+    // Dispatch event to notify other components
+    window.dispatchEvent(new Event('userDataChanged'));
     
     alert(`Transaction for ${transaction.userName} has been approved`);
   };
@@ -122,6 +151,9 @@ const AdminPage = () => {
     const transactions = JSON.parse(localStorage.getItem('transactions') || '[]');
     localStorage.setItem('transactions', JSON.stringify([rejectedTransaction, ...transactions]));
     
+    // Dispatch event to notify other components
+    window.dispatchEvent(new Event('userDataChanged'));
+    
     alert(`Transaction for ${transaction.userName} has been rejected`);
   };
 
@@ -140,12 +172,26 @@ const AdminPage = () => {
     });
     
     setUsers(updatedUsers);
+    
+    // Find and update the current user in localStorage if they're logged in
+    const currentLoggedInUser = JSON.parse(localStorage.getItem('user') || '{}');
+    if (currentLoggedInUser.id === kycRequest.userId) {
+      currentLoggedInUser.kycVerified = true;
+      currentLoggedInUser.kycLevel = kycRequest.level;
+      currentLoggedInUser.kycApprovedDate = new Date().toISOString();
+      localStorage.setItem('user', JSON.stringify(currentLoggedInUser));
+    }
+    
+    // Update all users in localStorage
     localStorage.setItem('users', JSON.stringify([...updatedUsers, { email: 'admin@credox.com', isAdmin: true }]));
     
     // Remove from pending KYC
     const updatedPendingKYC = pendingKYC.filter(k => k.id !== kycRequest.id);
     setPendingKYC(updatedPendingKYC);
     localStorage.setItem('pendingKYC', JSON.stringify(updatedPendingKYC));
+    
+    // Dispatch event to notify other components
+    window.dispatchEvent(new Event('userDataChanged'));
     
     alert(`KYC for ${kycRequest.userName} has been approved`);
   };
@@ -155,6 +201,9 @@ const AdminPage = () => {
     const updatedPendingKYC = pendingKYC.filter(k => k.id !== kycRequest.id);
     setPendingKYC(updatedPendingKYC);
     localStorage.setItem('pendingKYC', JSON.stringify(updatedPendingKYC));
+    
+    // Dispatch event to notify other components
+    window.dispatchEvent(new Event('userDataChanged'));
     
     alert(`KYC for ${kycRequest.userName} has been rejected`);
   };
@@ -210,140 +259,143 @@ const AdminPage = () => {
       </div>
       
       {activeTab === 'users' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* User Management */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold mb-4">User Management</h2>
-            
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Select User</label>
-              <select 
-                className="w-full border border-gray-300 rounded-md p-2"
-                value={selectedUser?.id || ''}
-                onChange={(e) => {
-                  const user = users.find(u => u.id === e.target.value);
-                  setSelectedUser(user || null);
-                }}
-              >
-                <option value="">Select a user</option>
-                {users.map(user => (
-                  <option key={user.id} value={user.id}>{user.name} ({user.email})</option>
-                ))}
-              </select>
-            </div>
-            
-            {selectedUser && (
-              <div className="border p-4 rounded-md mb-4">
-                <h3 className="font-medium mb-2">User Details</h3>
-                <p><span className="font-medium">Name:</span> {selectedUser.name}</p>
-                <p><span className="font-medium">Email:</span> {selectedUser.email}</p>
-                <p><span className="font-medium">Account ID:</span> {selectedUser.accountId}</p>
-                <p><span className="font-medium">Account Type:</span> {selectedUser.accountType}</p>
-                <p><span className="font-medium">Join Date:</span> {selectedUser.joinDate}</p>
-                <p><span className="font-medium">Cash Balance:</span> ${parseFloat(selectedUser.cashBalance || 0).toFixed(2)}</p>
-                <p><span className="font-medium">KYC Status:</span> {selectedUser.kycVerified ? 
-                  <span className="text-green-600">Verified (Level {selectedUser.kycLevel})</span> : 
-                  <span className="text-red-600">Not Verified</span>}
-                </p>
-              </div>
-            )}
-            
-            {selectedUser && (
-              <div className="border p-4 rounded-md">
-                <h3 className="font-medium mb-2">Update Balance</h3>
-                
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Transaction Type</label>
-                  <div className="flex space-x-4">
-                    <label className="inline-flex items-center">
-                      <input 
-                        type="radio" 
-                        className="form-radio" 
-                        name="transactionType" 
-                        value="deposit"
-                        checked={transactionType === 'deposit'}
-                        onChange={() => setTransactionType('deposit')}
-                      />
-                      <span className="ml-2">Deposit</span>
-                    </label>
-                    <label className="inline-flex items-center">
-                      <input 
-                        type="radio" 
-                        className="form-radio" 
-                        name="transactionType" 
-                        value="withdraw"
-                        checked={transactionType === 'withdraw'}
-                        onChange={() => setTransactionType('withdraw')}
-                      />
-                      <span className="ml-2">Withdraw</span>
-                    </label>
-                  </div>
-                </div>
-                
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-                  <div className="flex">
-                    <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500">$</span>
-                    <input
-                      type="number"
-                      className="flex-1 min-w-0 block w-full px-3 py-2 rounded-none rounded-r-md border border-gray-300"
-                      placeholder="0.00"
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                    />
-                  </div>
-                </div>
-                
-                <button
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded"
-                  onClick={() => {
-                    const amountValue = transactionType === 'deposit' 
-                      ? Math.abs(parseFloat(amount)) 
-                      : -Math.abs(parseFloat(amount));
-                    setAmount(amountValue.toString());
-                    handleUpdateBalance();
+        <>
+          <AdminDashboardCharts users={users} transactions={JSON.parse(localStorage.getItem('transactions') || '[]')} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* User Management */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-xl font-semibold mb-4">User Management</h2>
+              
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Select User</label>
+                <select 
+                  className="w-full border border-gray-300 rounded-md p-2"
+                  value={selectedUser?.id || ''}
+                  onChange={(e) => {
+                    const user = users.find(u => u.id === e.target.value);
+                    setSelectedUser(user || null);
                   }}
                 >
-                  Update Balance
-                </button>
-              </div>
-            )}
-          </div>
-          
-          {/* All Users */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold mb-4">All Users</h2>
-            
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Balance</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">KYC</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {users.map((user) => (
-                    <tr key={user.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedUser(user)}>
-                      <td className="px-4 py-3 whitespace-nowrap">{user.name}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">{user.email}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-right">${parseFloat(user.cashBalance || 0).toFixed(2)}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-center">
-                        {user.kycVerified ? (
-                          <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">Verified</span>
-                        ) : (
-                          <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">Not Verified</span>
-                        )}
-                      </td>
-                    </tr>
+                  <option value="">Select a user</option>
+                  {users.map(user => (
+                    <option key={user.id} value={user.id}>{user.name} ({user.email})</option>
                   ))}
-                </tbody>
-              </table>
+                </select>
+              </div>
+              
+              {selectedUser && (
+                <div className="border p-4 rounded-md mb-4">
+                  <h3 className="font-medium mb-2">User Details</h3>
+                  <p><span className="font-medium">Name:</span> {selectedUser.name}</p>
+                  <p><span className="font-medium">Email:</span> {selectedUser.email}</p>
+                  <p><span className="font-medium">Account ID:</span> {selectedUser.accountId}</p>
+                  <p><span className="font-medium">Account Type:</span> {selectedUser.accountType}</p>
+                  <p><span className="font-medium">Join Date:</span> {selectedUser.joinDate}</p>
+                  <p><span className="font-medium">Cash Balance:</span> ${parseFloat(selectedUser.cashBalance || 0).toFixed(2)}</p>
+                  <p><span className="font-medium">KYC Status:</span> {selectedUser.kycVerified ? 
+                    <span className="text-green-600">Verified (Level {selectedUser.kycLevel})</span> : 
+                    <span className="text-red-600">Not Verified</span>}
+                  </p>
+                </div>
+              )}
+              
+              {selectedUser && (
+                <div className="border p-4 rounded-md">
+                  <h3 className="font-medium mb-2">Update Balance</h3>
+                  
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Transaction Type</label>
+                    <div className="flex space-x-4">
+                      <label className="inline-flex items-center">
+                        <input 
+                          type="radio" 
+                          className="form-radio" 
+                          name="transactionType" 
+                          value="deposit"
+                          checked={transactionType === 'deposit'}
+                          onChange={() => setTransactionType('deposit')}
+                        />
+                        <span className="ml-2">Deposit</span>
+                      </label>
+                      <label className="inline-flex items-center">
+                        <input 
+                          type="radio" 
+                          className="form-radio" 
+                          name="transactionType" 
+                          value="withdraw"
+                          checked={transactionType === 'withdraw'}
+                          onChange={() => setTransactionType('withdraw')}
+                        />
+                        <span className="ml-2">Withdraw</span>
+                      </label>
+                    </div>
+                  </div>
+                  
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+                    <div className="flex">
+                      <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500">$</span>
+                      <input
+                        type="number"
+                        className="flex-1 min-w-0 block w-full px-3 py-2 rounded-none rounded-r-md border border-gray-300"
+                        placeholder="0.00"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  
+                  <button
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded"
+                    onClick={() => {
+                      const amountValue = transactionType === 'deposit' 
+                        ? Math.abs(parseFloat(amount)) 
+                        : -Math.abs(parseFloat(amount));
+                      setAmount(amountValue.toString());
+                      handleUpdateBalance();
+                    }}
+                  >
+                    Update Balance
+                  </button>
+                </div>
+              )}
+            </div>
+            
+            {/* All Users */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-xl font-semibold mb-4">All Users</h2>
+              
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Balance</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">KYC</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {users.map((user) => (
+                      <tr key={user.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedUser(user)}>
+                        <td className="px-4 py-3 whitespace-nowrap">{user.name}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">{user.email}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-right">${parseFloat(user.cashBalance || 0).toFixed(2)}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-center">
+                          {user.kycVerified ? (
+                            <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">Verified</span>
+                          ) : (
+                            <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">Not Verified</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
-        </div>
+        </>
       )}
       
       {activeTab === 'transactions' && (
