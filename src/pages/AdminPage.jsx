@@ -1,0 +1,481 @@
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
+
+const AdminPage = () => {
+  const { currentUser } = useAuth();
+  const navigate = useNavigate();
+  const [users, setUsers] = useState([]);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [amount, setAmount] = useState('');
+  const [transactionType, setTransactionType] = useState('deposit');
+  const [pendingTransactions, setPendingTransactions] = useState([]);
+  const [pendingKYC, setPendingKYC] = useState([]);
+  const [activeTab, setActiveTab] = useState('users');
+
+  // Check if user is admin
+  useEffect(() => {
+    if (!currentUser || currentUser.email !== 'admin@credox.com') {
+      navigate('/dashboard');
+    }
+    
+    // Load users from localStorage
+    const loadedUsers = JSON.parse(localStorage.getItem('users') || '[]');
+    setUsers(loadedUsers.filter(user => user.email !== 'admin@credox.com'));
+    
+    // Load pending transactions
+    const transactions = JSON.parse(localStorage.getItem('pendingTransactions') || '[]');
+    setPendingTransactions(transactions);
+    
+    // Load pending KYC
+    const kyc = JSON.parse(localStorage.getItem('pendingKYC') || '[]');
+    setPendingKYC(kyc);
+  }, [currentUser, navigate]);
+
+  const handleUpdateBalance = () => {
+    if (!selectedUser || !amount || isNaN(parseFloat(amount))) return;
+    
+    const updatedUsers = users.map(user => {
+      if (user.id === selectedUser.id) {
+        const currentBalance = parseFloat(user.cashBalance || 0);
+        const newBalance = currentBalance + parseFloat(amount);
+        return {
+          ...user,
+          cashBalance: newBalance >= 0 ? newBalance : 0
+        };
+      }
+      return user;
+    });
+    
+    setUsers(updatedUsers);
+    localStorage.setItem('users', JSON.stringify([...updatedUsers, { email: 'admin@credox.com', isAdmin: true }]));
+    
+    // Add to transaction history
+    const transaction = {
+      id: `transaction-${Date.now()}`,
+      userId: selectedUser.id,
+      userName: selectedUser.name,
+      type: parseFloat(amount) >= 0 ? 'deposit' : 'withdrawal',
+      amount: Math.abs(parseFloat(amount)),
+      status: 'completed',
+      date: new Date().toISOString()
+    };
+    
+    const transactions = JSON.parse(localStorage.getItem('transactions') || '[]');
+    localStorage.setItem('transactions', JSON.stringify([transaction, ...transactions]));
+    
+    setAmount('');
+    alert(`Successfully updated ${selectedUser.name}'s balance`);
+  };
+
+  const handleApproveTransaction = (transaction) => {
+    // Update user balance
+    const updatedUsers = users.map(user => {
+      if (user.id === transaction.userId) {
+        const currentBalance = parseFloat(user.cashBalance || 0);
+        const newBalance = transaction.type === 'deposit' 
+          ? (currentBalance + parseFloat(transaction.amount))
+          : (currentBalance - parseFloat(transaction.amount));
+        
+        return {
+          ...user,
+          cashBalance: newBalance >= 0 ? newBalance : 0
+        };
+      }
+      return user;
+    });
+    
+    setUsers(updatedUsers);
+    localStorage.setItem('users', JSON.stringify([...updatedUsers, { email: 'admin@credox.com', isAdmin: true }]));
+    
+    // Remove from pending and add to completed transactions
+    const updatedPending = pendingTransactions.filter(t => t.id !== transaction.id);
+    setPendingTransactions(updatedPending);
+    localStorage.setItem('pendingTransactions', JSON.stringify(updatedPending));
+    
+    // Add to transaction history
+    const completedTransaction = {
+      ...transaction,
+      status: 'completed',
+      completedDate: new Date().toISOString()
+    };
+    
+    const transactions = JSON.parse(localStorage.getItem('transactions') || '[]');
+    localStorage.setItem('transactions', JSON.stringify([completedTransaction, ...transactions]));
+    
+    alert(`Transaction for ${transaction.userName} has been approved`);
+  };
+
+  const handleRejectTransaction = (transaction) => {
+    // Remove from pending transactions
+    const updatedPending = pendingTransactions.filter(t => t.id !== transaction.id);
+    setPendingTransactions(updatedPending);
+    localStorage.setItem('pendingTransactions', JSON.stringify(updatedPending));
+    
+    // Add to transaction history as rejected
+    const rejectedTransaction = {
+      ...transaction,
+      status: 'rejected',
+      completedDate: new Date().toISOString()
+    };
+    
+    const transactions = JSON.parse(localStorage.getItem('transactions') || '[]');
+    localStorage.setItem('transactions', JSON.stringify([rejectedTransaction, ...transactions]));
+    
+    alert(`Transaction for ${transaction.userName} has been rejected`);
+  };
+
+  const handleApproveKYC = (kycRequest) => {
+    // Update user KYC status
+    const updatedUsers = users.map(user => {
+      if (user.id === kycRequest.userId) {
+        return {
+          ...user,
+          kycVerified: true,
+          kycLevel: kycRequest.level,
+          kycApprovedDate: new Date().toISOString()
+        };
+      }
+      return user;
+    });
+    
+    setUsers(updatedUsers);
+    localStorage.setItem('users', JSON.stringify([...updatedUsers, { email: 'admin@credox.com', isAdmin: true }]));
+    
+    // Remove from pending KYC
+    const updatedPendingKYC = pendingKYC.filter(k => k.id !== kycRequest.id);
+    setPendingKYC(updatedPendingKYC);
+    localStorage.setItem('pendingKYC', JSON.stringify(updatedPendingKYC));
+    
+    alert(`KYC for ${kycRequest.userName} has been approved`);
+  };
+
+  const handleRejectKYC = (kycRequest) => {
+    // Remove from pending KYC
+    const updatedPendingKYC = pendingKYC.filter(k => k.id !== kycRequest.id);
+    setPendingKYC(updatedPendingKYC);
+    localStorage.setItem('pendingKYC', JSON.stringify(updatedPendingKYC));
+    
+    alert(`KYC for ${kycRequest.userName} has been rejected`);
+  };
+
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-3xl font-bold mb-6">Admin Dashboard</h1>
+      
+      {/* Admin Tabs */}
+      <div className="mb-6 border-b border-gray-200 overflow-x-auto">
+        <nav className="flex space-x-8">
+          <button
+            onClick={() => setActiveTab('users')}
+            className={`py-4 px-1 border-b-2 font-medium whitespace-nowrap ${
+              activeTab === 'users'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            User Management
+          </button>
+          <button
+            onClick={() => setActiveTab('transactions')}
+            className={`py-4 px-1 border-b-2 font-medium whitespace-nowrap ${
+              activeTab === 'transactions'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Pending Transactions
+            {pendingTransactions.length > 0 && (
+              <span className="ml-2 bg-red-600 text-white text-xs rounded-full px-2 py-1">
+                {pendingTransactions.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('kyc')}
+            className={`py-4 px-1 border-b-2 font-medium whitespace-nowrap ${
+              activeTab === 'kyc'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            KYC Verification
+            {pendingKYC.length > 0 && (
+              <span className="ml-2 bg-red-600 text-white text-xs rounded-full px-2 py-1">
+                {pendingKYC.length}
+              </span>
+            )}
+          </button>
+        </nav>
+      </div>
+      
+      {activeTab === 'users' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* User Management */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-xl font-semibold mb-4">User Management</h2>
+            
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Select User</label>
+              <select 
+                className="w-full border border-gray-300 rounded-md p-2"
+                value={selectedUser?.id || ''}
+                onChange={(e) => {
+                  const user = users.find(u => u.id === e.target.value);
+                  setSelectedUser(user || null);
+                }}
+              >
+                <option value="">Select a user</option>
+                {users.map(user => (
+                  <option key={user.id} value={user.id}>{user.name} ({user.email})</option>
+                ))}
+              </select>
+            </div>
+            
+            {selectedUser && (
+              <div className="border p-4 rounded-md mb-4">
+                <h3 className="font-medium mb-2">User Details</h3>
+                <p><span className="font-medium">Name:</span> {selectedUser.name}</p>
+                <p><span className="font-medium">Email:</span> {selectedUser.email}</p>
+                <p><span className="font-medium">Account ID:</span> {selectedUser.accountId}</p>
+                <p><span className="font-medium">Account Type:</span> {selectedUser.accountType}</p>
+                <p><span className="font-medium">Join Date:</span> {selectedUser.joinDate}</p>
+                <p><span className="font-medium">Cash Balance:</span> ${parseFloat(selectedUser.cashBalance || 0).toFixed(2)}</p>
+                <p><span className="font-medium">KYC Status:</span> {selectedUser.kycVerified ? 
+                  <span className="text-green-600">Verified (Level {selectedUser.kycLevel})</span> : 
+                  <span className="text-red-600">Not Verified</span>}
+                </p>
+              </div>
+            )}
+            
+            {selectedUser && (
+              <div className="border p-4 rounded-md">
+                <h3 className="font-medium mb-2">Update Balance</h3>
+                
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Transaction Type</label>
+                  <div className="flex space-x-4">
+                    <label className="inline-flex items-center">
+                      <input 
+                        type="radio" 
+                        className="form-radio" 
+                        name="transactionType" 
+                        value="deposit"
+                        checked={transactionType === 'deposit'}
+                        onChange={() => setTransactionType('deposit')}
+                      />
+                      <span className="ml-2">Deposit</span>
+                    </label>
+                    <label className="inline-flex items-center">
+                      <input 
+                        type="radio" 
+                        className="form-radio" 
+                        name="transactionType" 
+                        value="withdraw"
+                        checked={transactionType === 'withdraw'}
+                        onChange={() => setTransactionType('withdraw')}
+                      />
+                      <span className="ml-2">Withdraw</span>
+                    </label>
+                  </div>
+                </div>
+                
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+                  <div className="flex">
+                    <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500">$</span>
+                    <input
+                      type="number"
+                      className="flex-1 min-w-0 block w-full px-3 py-2 rounded-none rounded-r-md border border-gray-300"
+                      placeholder="0.00"
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                    />
+                  </div>
+                </div>
+                
+                <button
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded"
+                  onClick={() => {
+                    const amountValue = transactionType === 'deposit' 
+                      ? Math.abs(parseFloat(amount)) 
+                      : -Math.abs(parseFloat(amount));
+                    setAmount(amountValue.toString());
+                    handleUpdateBalance();
+                  }}
+                >
+                  Update Balance
+                </button>
+              </div>
+            )}
+          </div>
+          
+          {/* All Users */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-xl font-semibold mb-4">All Users</h2>
+            
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Balance</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">KYC</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {users.map((user) => (
+                    <tr key={user.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedUser(user)}>
+                      <td className="px-4 py-3 whitespace-nowrap">{user.name}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{user.email}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-right">${parseFloat(user.cashBalance || 0).toFixed(2)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-center">
+                        {user.kycVerified ? (
+                          <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">Verified</span>
+                        ) : (
+                          <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">Not Verified</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {activeTab === 'transactions' && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-xl font-semibold mb-4">Pending Transactions</h2>
+          
+          {pendingTransactions.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {pendingTransactions.map((transaction) => (
+                    <tr key={transaction.id}>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="font-medium">{transaction.userName}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          transaction.type === 'deposit' 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        ${parseFloat(transaction.amount).toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        {new Date(transaction.date).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        <button 
+                          className="text-green-600 hover:text-green-900 mr-3"
+                          onClick={() => handleApproveTransaction(transaction)}
+                        >
+                          Approve
+                        </button>
+                        <button 
+                          className="text-red-600 hover:text-red-900"
+                          onClick={() => handleRejectTransaction(transaction)}
+                        >
+                          Reject
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              No pending transactions
+            </div>
+          )}
+        </div>
+      )}
+      
+      {activeTab === 'kyc' && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-xl font-semibold mb-4">KYC Verification Requests</h2>
+          
+          {pendingKYC.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Level</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Documents</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {pendingKYC.map((kyc) => (
+                    <tr key={kyc.id}>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="font-medium">{kyc.userName}</div>
+                        <div className="text-sm text-gray-500">{kyc.userEmail}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
+                          Level {kyc.level}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <ul className="list-disc pl-5 text-sm">
+                          {kyc.documents.map((doc, index) => (
+                            <li key={index}>{doc.type}: <a href="#" className="text-blue-600 hover:underline">View</a></li>
+                          ))}
+                        </ul>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        {new Date(kyc.date).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        <button 
+                          className="text-green-600 hover:text-green-900 mr-3"
+                          onClick={() => handleApproveKYC(kyc)}
+                        >
+                          Approve
+                        </button>
+                        <button 
+                          className="text-red-600 hover:text-red-900"
+                          onClick={() => handleRejectKYC(kyc)}
+                        >
+                          Reject
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              No pending KYC verification requests
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default AdminPage;
