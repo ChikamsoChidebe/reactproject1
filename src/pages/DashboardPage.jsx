@@ -50,13 +50,13 @@ const DashboardPage = () => {
     };
   }, [currentUser, navigate]);
   
-  // Calculate total portfolio value
-  const totalPortfolioValue = positions.reduce((total, position) => {
+  // Calculate total portfolio value - should be 0 if no cash balance
+  const totalPortfolioValue = cashBalance === 0 ? 0 : positions.reduce((total, position) => {
     return total + position.marketValue;
   }, cashBalance);
   
-  // Calculate daily P&L
-  const dailyPL = positions.reduce((total, position) => {
+  // Calculate daily P&L - should be 0 if no cash balance
+  const dailyPL = cashBalance === 0 ? 0 : positions.reduce((total, position) => {
     return total + (position.currentPrice - position.entryPrice) * position.quantity;
   }, 0);
   
@@ -220,7 +220,13 @@ const DashboardPage = () => {
               </div>
             </div>
             <div className="h-64 bg-gray-50 rounded">
-              <PortfolioChart timeframe="1D" key={`portfolio-${refreshKey}`} />
+              {cashBalance > 0 ? (
+                <PortfolioChart timeframe="1D" key={`portfolio-${refreshKey}`} />
+              ) : (
+                <div className="h-full flex items-center justify-center text-gray-400">
+                  No portfolio data available. Fund your account to start trading.
+                </div>
+              )}
             </div>
           </div>
           
@@ -403,36 +409,42 @@ const DashboardPage = () => {
       {activeTab === 'orders' && (
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-lg font-medium mb-4">Open Orders</h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead>
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Symbol</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Side</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                <tr>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm">Jun 1, 2025</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm">AMZN</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm">
-                    <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">Buy</span>
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm">Limit</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-right">2</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-right">$140.00</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
-                    <button className="text-red-600 hover:text-red-800">Cancel</button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          {cashBalance > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Symbol</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Side</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  <tr>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm">Jun 1, 2025</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm">AMZN</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm">
+                      <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">Buy</span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm">Limit</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right">2</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right">$140.00</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
+                      <button className="text-red-600 hover:text-red-800">Cancel</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              No open orders. Fund your account to start trading.
+            </div>
+          )}
         </div>
       )}
       

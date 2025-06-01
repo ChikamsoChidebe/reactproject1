@@ -8,7 +8,7 @@ const TradingContext = createContext();
 export const TradingProvider = ({ children }) => {
   const { currentUser } = useAuth();
   const [positions, setPositions] = useState([]);
-  const [cashBalance, setCashBalance] = useState(10000);
+  const [cashBalance, setCashBalance] = useState(0);
   const [orders, setOrders] = useState([]);
   const [watchlist, setWatchlist] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -26,36 +26,43 @@ export const TradingProvider = ({ children }) => {
           
           if (user) {
             // Set cash balance from user data
-            setCashBalance(parseFloat(user.cashBalance || 10000));
+            setCashBalance(parseFloat(user.cashBalance || 0));
+          } else {
+            setCashBalance(0);
           }
           
-          // Load positions (in a real app, these would come from a database)
-          setPositions([
-            {
-              id: 'pos-1',
-              symbol: 'AAPL',
-              name: 'Apple Inc.',
-              quantity: 10,
-              entryPrice: 175.50,
-              currentPrice: 180.25,
-              marketValue: 1802.50,
-              unrealizedPL: 47.50,
-              unrealizedPLPercent: 2.71,
-              side: 'LONG'
-            },
-            {
-              id: 'pos-2',
-              symbol: 'MSFT',
-              name: 'Microsoft Corporation',
-              quantity: 5,
-              entryPrice: 334.12,
-              currentPrice: 340.50,
-              marketValue: 1702.50,
-              unrealizedPL: 31.90,
-              unrealizedPLPercent: 1.91,
-              side: 'LONG'
-            }
-          ]);
+          // For new users with zero balance, don't load any positions
+          if (!user || parseFloat(user.cashBalance || 0) === 0) {
+            setPositions([]);
+          } else {
+            // Only load positions for users with positive balance
+            setPositions([
+              {
+                id: 'pos-1',
+                symbol: 'AAPL',
+                name: 'Apple Inc.',
+                quantity: 10,
+                entryPrice: 175.50,
+                currentPrice: 180.25,
+                marketValue: 1802.50,
+                unrealizedPL: 47.50,
+                unrealizedPLPercent: 2.71,
+                side: 'LONG'
+              },
+              {
+                id: 'pos-2',
+                symbol: 'MSFT',
+                name: 'Microsoft Corporation',
+                quantity: 5,
+                entryPrice: 334.12,
+                currentPrice: 340.50,
+                marketValue: 1702.50,
+                unrealizedPL: 31.90,
+                unrealizedPLPercent: 1.91,
+                side: 'LONG'
+              }
+            ]);
+          }
           
           // Load orders
           setOrders([]);
@@ -64,7 +71,12 @@ export const TradingProvider = ({ children }) => {
           setWatchlist(['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA']);
         } catch (err) {
           console.error('Error loading trading data:', err);
+          setCashBalance(0);
+          setPositions([]);
         }
+      } else {
+        setCashBalance(0);
+        setPositions([]);
       }
       
       setIsLoading(false);
@@ -81,6 +93,13 @@ export const TradingProvider = ({ children }) => {
     
     window.addEventListener('storage', handleStorageChange);
     
+    // Listen for custom event
+    const handleUserDataChanged = () => {
+      loadUserData();
+    };
+    
+    window.addEventListener('userDataChanged', handleUserDataChanged);
+    
     // Create a polling mechanism to check for changes
     const intervalId = setInterval(() => {
       loadUserData();
@@ -88,6 +107,7 @@ export const TradingProvider = ({ children }) => {
     
     return () => {
       window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('userDataChanged', handleUserDataChanged);
       clearInterval(intervalId);
     };
   }, [currentUser]);
