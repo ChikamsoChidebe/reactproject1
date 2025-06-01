@@ -102,7 +102,7 @@ export const AuthProvider = ({ children }) => {
         accountType: 'Standard',
         joinDate: new Date().toISOString().split('T')[0],
         twoFactorEnabled: false,
-        cashBalance: 10000 // Initial balance
+        cashBalance: 0 // Initial balance is zero until admin approves
       };
       
       // Save to users array

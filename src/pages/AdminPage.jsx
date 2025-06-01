@@ -3,6 +3,33 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import AdminDashboardCharts from '../components/charts/AdminDashboardCharts';
 
+// Create admin account if it doesn't exist
+const createAdminIfNeeded = () => {
+  const users = JSON.parse(localStorage.getItem('users') || '[]');
+  const adminExists = users.some(user => user.email === 'admin@credox.com');
+  
+  if (!adminExists) {
+    const adminUser = {
+      id: 'admin-user',
+      name: 'Admin',
+      email: 'admin@credox.com',
+      password: 'admin123', // In a real app, use a secure password
+      accountId: 'CR-ADMIN',
+      accountType: 'Admin',
+      joinDate: new Date().toISOString().split('T')[0],
+      isAdmin: true,
+      cashBalance: 1000000
+    };
+    
+    users.push(adminUser);
+    localStorage.setItem('users', JSON.stringify(users));
+    console.log('Admin account created');
+  }
+};
+
+// Call this function when the file is loaded
+createAdminIfNeeded();
+
 const AdminPage = () => {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
@@ -58,7 +85,13 @@ const AdminPage = () => {
     }
     
     // Update all users in localStorage
-    localStorage.setItem('users', JSON.stringify([...updatedUsers, { email: 'admin@credox.com', isAdmin: true }]));
+    const allUsers = JSON.parse(localStorage.getItem('users') || '[]');
+    const adminUser = allUsers.find(user => user.email === 'admin@credox.com');
+    
+    localStorage.setItem('users', JSON.stringify([
+      ...updatedUsers,
+      adminUser || { email: 'admin@credox.com', isAdmin: true }
+    ]));
     
     // Add to transaction history
     const transaction = {
@@ -81,6 +114,9 @@ const AdminPage = () => {
     alert(`Successfully updated ${selectedUser.name}'s balance`);
   };
 
+  // Rest of the component remains the same...
+  
+  // Existing code for handleApproveTransaction, handleRejectTransaction, etc.
   const handleApproveTransaction = (transaction) => {
     // Update user balance
     const updatedUsers = users.map(user => {
@@ -112,7 +148,13 @@ const AdminPage = () => {
     }
     
     // Update all users in localStorage
-    localStorage.setItem('users', JSON.stringify([...updatedUsers, { email: 'admin@credox.com', isAdmin: true }]));
+    const allUsers = JSON.parse(localStorage.getItem('users') || '[]');
+    const adminUser = allUsers.find(user => user.email === 'admin@credox.com');
+    
+    localStorage.setItem('users', JSON.stringify([
+      ...updatedUsers,
+      adminUser || { email: 'admin@credox.com', isAdmin: true }
+    ]));
     
     // Remove from pending and add to completed transactions
     const updatedPending = pendingTransactions.filter(t => t.id !== transaction.id);
@@ -183,7 +225,13 @@ const AdminPage = () => {
     }
     
     // Update all users in localStorage
-    localStorage.setItem('users', JSON.stringify([...updatedUsers, { email: 'admin@credox.com', isAdmin: true }]));
+    const allUsers = JSON.parse(localStorage.getItem('users') || '[]');
+    const adminUser = allUsers.find(user => user.email === 'admin@credox.com');
+    
+    localStorage.setItem('users', JSON.stringify([
+      ...updatedUsers,
+      adminUser || { email: 'admin@credox.com', isAdmin: true }
+    ]));
     
     // Remove from pending KYC
     const updatedPendingKYC = pendingKYC.filter(k => k.id !== kycRequest.id);
