@@ -15,42 +15,49 @@ const DashboardPage = () => {
   const [realCashBalance, setRealCashBalance] = useState(0);
   const navigate = useNavigate();
   
-  // Get real-time cash balance directly from localStorage and API
-  const getRealCashBalance = async () => {
-    if (!currentUser) return 0;
+// Get real-time cash balance directly from localStorage and API
+const getRealCashBalance = async () => {
+  if (!currentUser) return 0;
+  
+  try {
+    // First check localStorage which is more reliable
+    const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
+    // Find user by ID and by email as fallback
+    const localUser = localUsers.find(u => u.id === currentUser.id) || 
+                     localUsers.find(u => u.email === currentUser.email);
     
-    try {
-      // First check localStorage which is more reliable
-      const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
-      const localUser = localUsers.find(u => u.id === currentUser.id);
-      if (localUser && parseFloat(localUser.cashBalance || 0) > 0) {
-        const balance = parseFloat(localUser.cashBalance || 0);
-        console.log("Got balance from localStorage:", balance);
-        return balance;
-      }
-      
-      // Then try API
-      try {
-        const response = await fetch(`https://credoxbackend.onrender.com/api/users`);
-        if (response.ok) {
-          const apiUsers = await response.json();
-          console.log("All API users:", apiUsers);
-          const apiUser = apiUsers.find(u => u.id === currentUser.id);
-          if (apiUser) {
-            console.log("Got user from API:", apiUser);
-            return parseFloat(apiUser.cashBalance || 0);
-          }
-        }
-      } catch (apiErr) {
-        console.error("Error fetching user from API:", apiErr);
-      }
-    } catch (err) {
-      console.error('Error getting cash balance:', err);
+    if (localUser && parseFloat(localUser.cashBalance || 0) > 0) {
+      const balance = parseFloat(localUser.cashBalance || 0);
+      console.log("Got balance from localStorage:", balance);
+      return balance;
     }
     
-    // Last resort - use context value
-    return cashBalance;
-  };
+    // Then try API
+    try {
+      const response = await fetch(`https://credoxbackend.onrender.com/api/users`);
+      if (response.ok) {
+        const apiUsers = await response.json();
+        console.log("All API users:", apiUsers);
+        // Find user by ID and by email as fallback
+        const apiUser = apiUsers.find(u => u.id === currentUser.id) ||
+                       apiUsers.find(u => u.email === currentUser.email);
+        
+        if (apiUser) {
+          console.log("Got user from API:", apiUser);
+          return parseFloat(apiUser.cashBalance || 0);
+        }
+      }
+    } catch (apiErr) {
+      console.error("Error fetching user from API:", apiErr);
+    }
+  } catch (err) {
+    console.error('Error getting cash balance:', err);
+  }
+  
+  // Last resort - use context value
+  return cashBalance;
+};
+
   
   // Redirect if not logged in
   useEffect(() => {
@@ -177,12 +184,31 @@ const DashboardPage = () => {
   };
   
   // Manual refresh button handler
-  const handleRefresh = async () => {
+// Replace the handleRefresh function in DashboardPage.jsx with this:
+const handleRefresh = async () => {
+  // Direct check of all users in localStorage
+  const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
+  console.log("All users in localStorage:", localUsers);
+  console.log("Current user ID:", currentUser.id);
+  
+  // Find user by ID and by email as fallback
+  const localUser = localUsers.find(u => u.id === currentUser.id) || 
+                   localUsers.find(u => u.email === currentUser.email);
+  
+  if (localUser) {
+    console.log("Found user in localStorage:", localUser);
+    const localBalance = parseFloat(localUser.cashBalance || 0);
+    console.log("User's cash balance:", localBalance);
+    setRealCashBalance(localBalance);
+  } else {
+    console.log("User not found in localStorage");
     const balance = await getRealCashBalance();
     setRealCashBalance(balance);
-    setRefreshKey(prevKey => prevKey + 1);
-    console.log("Manual refresh, cash balance:", balance);
-  };
+  }
+  
+  setRefreshKey(prevKey => prevKey + 1);
+};
+
 
   if (!currentUser) {
     return null; // Will redirect in useEffect
