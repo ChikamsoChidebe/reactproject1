@@ -81,6 +81,31 @@ const AdminPage = () => {
         cashBalance: parseFloat(selectedUser.cashBalance || 0) + amountValue
       });
       
+      // Also update in localStorage for immediate effect
+      const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
+      const updatedLocalUsers = localUsers.map(user => {
+        if (user.id === selectedUser.id) {
+          const currentBalance = parseFloat(user.cashBalance || 0);
+          const newBalance = currentBalance + amountValue;
+          return {
+            ...user,
+            cashBalance: newBalance >= 0 ? newBalance : 0
+          };
+        }
+        return user;
+      });
+      localStorage.setItem('users', JSON.stringify(updatedLocalUsers));
+      
+      // Update current user if it's the same user
+      const currentLoggedInUser = JSON.parse(localStorage.getItem('user') || '{}');
+      if (currentLoggedInUser.id === selectedUser.id) {
+        currentLoggedInUser.cashBalance = parseFloat(currentLoggedInUser.cashBalance || 0) + amountValue;
+        localStorage.setItem('user', JSON.stringify(currentLoggedInUser));
+      }
+      
+      // Dispatch event to notify other components
+      window.dispatchEvent(new Event('userDataChanged'));
+      
       // Create transaction record
       const transaction = {
         id: `transaction-${Date.now()}`,
@@ -248,6 +273,9 @@ const AdminPage = () => {
       
       // Save to localStorage
       localStorage.setItem(`positions_${selectedUser.id}`, JSON.stringify(updatedPositions));
+      
+      // Dispatch event to notify other components
+      window.dispatchEvent(new Event('userDataChanged'));
       
       // Create a transaction record
       const transaction = {
