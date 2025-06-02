@@ -6,6 +6,8 @@ const API_URL = isProduction
   ? 'https://credoxbackend.onrender.com/api'  // Deployed backend
   : 'http://localhost:5000/api';              // Local development
 
+console.log("Using API URL:", API_URL);
+
 const api = axios.create({
   baseURL: API_URL,
   headers: {

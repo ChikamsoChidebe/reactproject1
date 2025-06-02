@@ -33,7 +33,10 @@ const AdminPage = () => {
         // Fetch users from API
         const allUsers = await userService.getAllUsers();
         console.log("Users fetched:", allUsers);
-        setUsers(allUsers.filter(user => user.email !== 'admin@credox.com'));
+        console.log("User details:", JSON.stringify(allUsers, null, 2));
+        
+        // Don't filter out admin user for now to see all users
+        setUsers(allUsers);
         
         // Fetch pending transactions
         const transactions = await transactionService.getPendingTransactions();
