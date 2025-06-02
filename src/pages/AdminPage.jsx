@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import AdminDashboardCharts from '../components/charts/AdminDashboardCharts';
+import { userService, transactionService, kycService } from '../services/api';
 
 // Create admin account if it doesn't exist
 const createAdminIfNeeded = () => {
@@ -40,6 +41,8 @@ const AdminPage = () => {
   const [pendingTransactions, setPendingTransactions] = useState([]);
   const [pendingKYC, setPendingKYC] = useState([]);
   const [activeTab, setActiveTab] = useState('users');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   // Check if user is admin
   useEffect(() => {
@@ -47,218 +50,315 @@ const AdminPage = () => {
       navigate('/dashboard');
     }
     
-    // Load users from localStorage
-    const loadedUsers = JSON.parse(localStorage.getItem('users') || '[]');
-    setUsers(loadedUsers.filter(user => user.email !== 'admin@credox.com'));
+    const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        // Fetch users from API
+        const allUsers = await userService.getAllUsers();
+        setUsers(allUsers.filter(user => user.email !== 'admin@credox.com'));
+        
+        // Fetch pending transactions
+        const transactions = await transactionService.getPendingTransactions();
+        setPendingTransactions(transactions);
+        
+        // Fetch pending KYC
+        const kyc = await kycService.getPendingKYC();
+        setPendingKYC(kyc);
+      } catch (err) {
+        console.error('Error fetching data:', err);
+        setError('Failed to load data. Falling back to local data.');
+        
+        // Fallback to localStorage
+        const loadedUsers = JSON.parse(localStorage.getItem('users') || '[]');
+        setUsers(loadedUsers.filter(user => user.email !== 'admin@credox.com'));
+        
+        const localTransactions = JSON.parse(localStorage.getItem('pendingTransactions') || '[]');
+        setPendingTransactions(localTransactions);
+        
+        const localKYC = JSON.parse(localStorage.getItem('pendingKYC') || '[]');
+        setPendingKYC(localKYC);
+      } finally {
+        setIsLoading(false);
+      }
+    };
     
-    // Load pending transactions
-    const transactions = JSON.parse(localStorage.getItem('pendingTransactions') || '[]');
-    setPendingTransactions(transactions);
+    fetchData();
     
-    // Load pending KYC
-    const kyc = JSON.parse(localStorage.getItem('pendingKYC') || '[]');
-    setPendingKYC(kyc);
+    // Set up polling for real-time updates
+    const intervalId = setInterval(() => {
+      fetchData();
+    }, 10000); // Poll every 10 seconds
+    
+    return () => clearInterval(intervalId);
   }, [currentUser, navigate]);
 
-  const handleUpdateBalance = () => {
+  const handleUpdateBalance = async () => {
     if (!selectedUser || !amount || isNaN(parseFloat(amount))) return;
     
-    const updatedUsers = users.map(user => {
-      if (user.id === selectedUser.id) {
-        const currentBalance = parseFloat(user.cashBalance || 0);
-        const newBalance = currentBalance + parseFloat(amount);
-        return {
-          ...user,
-          cashBalance: newBalance >= 0 ? newBalance : 0
-        };
-      }
-      return user;
-    });
+    const amountValue = parseFloat(amount);
     
-    setUsers(updatedUsers);
-    
-    // Find and update the current user in localStorage if they're logged in
-    const currentLoggedInUser = JSON.parse(localStorage.getItem('user') || '{}');
-    if (currentLoggedInUser.id === selectedUser.id) {
-      currentLoggedInUser.cashBalance = parseFloat(selectedUser.cashBalance || 0) + parseFloat(amount);
-      localStorage.setItem('user', JSON.stringify(currentLoggedInUser));
+    try {
+      // Update user via API
+      await userService.updateUser(selectedUser.id, {
+        cashBalance: parseFloat(selectedUser.cashBalance || 0) + amountValue
+      });
+      
+      // Create transaction record
+      const transaction = {
+        id: `transaction-${Date.now()}`,
+        userId: selectedUser.id,
+        userName: selectedUser.name,
+        type: amountValue >= 0 ? 'deposit' : 'withdrawal',
+        amount: Math.abs(amountValue),
+        status: 'completed',
+        date: new Date().toISOString()
+      };
+      
+      await transactionService.createTransaction(transaction);
+      
+      // Update local state
+      setUsers(prevUsers => 
+        prevUsers.map(user => {
+          if (user.id === selectedUser.id) {
+            const newBalance = parseFloat(user.cashBalance || 0) + amountValue;
+            return {
+              ...user,
+              cashBalance: newBalance >= 0 ? newBalance : 0
+            };
+          }
+          return user;
+        })
+      );
+      
+      setSelectedUser(prev => ({
+        ...prev,
+        cashBalance: parseFloat(prev.cashBalance || 0) + amountValue
+      }));
+      
+      // Fallback to localStorage for compatibility
+      const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
+      const updatedLocalUsers = localUsers.map(user => {
+        if (user.id === selectedUser.id) {
+          const currentBalance = parseFloat(user.cashBalance || 0);
+          const newBalance = currentBalance + amountValue;
+          return {
+            ...user,
+            cashBalance: newBalance >= 0 ? newBalance : 0
+          };
+        }
+        return user;
+      });
+      
+      localStorage.setItem('users', JSON.stringify(updatedLocalUsers));
+      
+      // Update localStorage transactions
+      const localTransactions = JSON.parse(localStorage.getItem('transactions') || '[]');
+      localStorage.setItem('transactions', JSON.stringify([transaction, ...localTransactions]));
+      
+      // Dispatch event for other components
+      window.dispatchEvent(new Event('userDataChanged'));
+      
+      setAmount('');
+      alert(`Successfully updated ${selectedUser.name}'s balance`);
+    } catch (err) {
+      console.error('Error updating balance:', err);
+      alert(`Failed to update balance: ${err.message}`);
     }
-    
-    // Update all users in localStorage
-    const allUsers = JSON.parse(localStorage.getItem('users') || '[]');
-    const adminUser = allUsers.find(user => user.email === 'admin@credox.com');
-    
-    localStorage.setItem('users', JSON.stringify([
-      ...updatedUsers,
-      adminUser || { email: 'admin@credox.com', isAdmin: true }
-    ]));
-    
-    // Add to transaction history
-    const transaction = {
-      id: `transaction-${Date.now()}`,
-      userId: selectedUser.id,
-      userName: selectedUser.name,
-      type: parseFloat(amount) >= 0 ? 'deposit' : 'withdrawal',
-      amount: Math.abs(parseFloat(amount)),
-      status: 'completed',
-      date: new Date().toISOString()
-    };
-    
-    const transactions = JSON.parse(localStorage.getItem('transactions') || '[]');
-    localStorage.setItem('transactions', JSON.stringify([transaction, ...transactions]));
-    
-    // Dispatch event to notify other components
-    window.dispatchEvent(new Event('userDataChanged'));
-    
-    setAmount('');
-    alert(`Successfully updated ${selectedUser.name}'s balance`);
   };
 
-  // Rest of the component remains the same...
-  
-  // Existing code for handleApproveTransaction, handleRejectTransaction, etc.
-  const handleApproveTransaction = (transaction) => {
-    // Update user balance
-    const updatedUsers = users.map(user => {
-      if (user.id === transaction.userId) {
-        const currentBalance = parseFloat(user.cashBalance || 0);
-        const newBalance = transaction.type === 'deposit' 
-          ? (currentBalance + parseFloat(transaction.amount))
-          : (currentBalance - parseFloat(transaction.amount));
-        
-        return {
-          ...user,
-          cashBalance: newBalance >= 0 ? newBalance : 0
-        };
-      }
-      return user;
-    });
-    
-    setUsers(updatedUsers);
-    
-    // Find and update the current user in localStorage if they're logged in
-    const currentLoggedInUser = JSON.parse(localStorage.getItem('user') || '{}');
-    if (currentLoggedInUser.id === transaction.userId) {
-      if (transaction.type === 'deposit') {
-        currentLoggedInUser.cashBalance = parseFloat(currentLoggedInUser.cashBalance || 0) + parseFloat(transaction.amount);
-      } else {
-        currentLoggedInUser.cashBalance = parseFloat(currentLoggedInUser.cashBalance || 0) - parseFloat(transaction.amount);
-      }
-      localStorage.setItem('user', JSON.stringify(currentLoggedInUser));
+  const handleApproveTransaction = async (transaction) => {
+    try {
+      // Approve transaction via API
+      await transactionService.approveTransaction(transaction.id);
+      
+      // Update local state
+      setPendingTransactions(prev => prev.filter(t => t.id !== transaction.id));
+      
+      // Update users state
+      setUsers(prevUsers => 
+        prevUsers.map(user => {
+          if (user.id === transaction.userId) {
+            const currentBalance = parseFloat(user.cashBalance || 0);
+            const newBalance = transaction.type === 'deposit' 
+              ? (currentBalance + parseFloat(transaction.amount))
+              : (currentBalance - parseFloat(transaction.amount));
+            
+            return {
+              ...user,
+              cashBalance: newBalance >= 0 ? newBalance : 0
+            };
+          }
+          return user;
+        })
+      );
+      
+      // Fallback to localStorage for compatibility
+      const localPendingTransactions = JSON.parse(localStorage.getItem('pendingTransactions') || '[]');
+      const updatedPending = localPendingTransactions.filter(t => t.id !== transaction.id);
+      localStorage.setItem('pendingTransactions', JSON.stringify(updatedPending));
+      
+      const localTransactions = JSON.parse(localStorage.getItem('transactions') || '[]');
+      const completedTransaction = {
+        ...transaction,
+        status: 'completed',
+        completedDate: new Date().toISOString()
+      };
+      localStorage.setItem('transactions', JSON.stringify([completedTransaction, ...localTransactions]));
+      
+      const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
+      const updatedLocalUsers = localUsers.map(user => {
+        if (user.id === transaction.userId) {
+          const currentBalance = parseFloat(user.cashBalance || 0);
+          const newBalance = transaction.type === 'deposit' 
+            ? (currentBalance + parseFloat(transaction.amount))
+            : (currentBalance - parseFloat(transaction.amount));
+          
+          return {
+            ...user,
+            cashBalance: newBalance >= 0 ? newBalance : 0
+          };
+        }
+        return user;
+      });
+      localStorage.setItem('users', JSON.stringify(updatedLocalUsers));
+      
+      // Dispatch event for other components
+      window.dispatchEvent(new Event('userDataChanged'));
+      
+      alert(`Transaction for ${transaction.userName} has been approved`);
+    } catch (err) {
+      console.error('Error approving transaction:', err);
+      alert(`Failed to approve transaction: ${err.message}`);
     }
-    
-    // Update all users in localStorage
-    const allUsers = JSON.parse(localStorage.getItem('users') || '[]');
-    const adminUser = allUsers.find(user => user.email === 'admin@credox.com');
-    
-    localStorage.setItem('users', JSON.stringify([
-      ...updatedUsers,
-      adminUser || { email: 'admin@credox.com', isAdmin: true }
-    ]));
-    
-    // Remove from pending and add to completed transactions
-    const updatedPending = pendingTransactions.filter(t => t.id !== transaction.id);
-    setPendingTransactions(updatedPending);
-    localStorage.setItem('pendingTransactions', JSON.stringify(updatedPending));
-    
-    // Add to transaction history
-    const completedTransaction = {
-      ...transaction,
-      status: 'completed',
-      completedDate: new Date().toISOString()
-    };
-    
-    const transactions = JSON.parse(localStorage.getItem('transactions') || '[]');
-    localStorage.setItem('transactions', JSON.stringify([completedTransaction, ...transactions]));
-    
-    // Dispatch event to notify other components
-    window.dispatchEvent(new Event('userDataChanged'));
-    
-    alert(`Transaction for ${transaction.userName} has been approved`);
   };
 
-  const handleRejectTransaction = (transaction) => {
-    // Remove from pending transactions
-    const updatedPending = pendingTransactions.filter(t => t.id !== transaction.id);
-    setPendingTransactions(updatedPending);
-    localStorage.setItem('pendingTransactions', JSON.stringify(updatedPending));
-    
-    // Add to transaction history as rejected
-    const rejectedTransaction = {
-      ...transaction,
-      status: 'rejected',
-      completedDate: new Date().toISOString()
-    };
-    
-    const transactions = JSON.parse(localStorage.getItem('transactions') || '[]');
-    localStorage.setItem('transactions', JSON.stringify([rejectedTransaction, ...transactions]));
-    
-    // Dispatch event to notify other components
-    window.dispatchEvent(new Event('userDataChanged'));
-    
-    alert(`Transaction for ${transaction.userName} has been rejected`);
-  };
-
-  const handleApproveKYC = (kycRequest) => {
-    // Update user KYC status
-    const updatedUsers = users.map(user => {
-      if (user.id === kycRequest.userId) {
-        return {
-          ...user,
-          kycVerified: true,
-          kycLevel: kycRequest.level,
-          kycApprovedDate: new Date().toISOString()
-        };
-      }
-      return user;
-    });
-    
-    setUsers(updatedUsers);
-    
-    // Find and update the current user in localStorage if they're logged in
-    const currentLoggedInUser = JSON.parse(localStorage.getItem('user') || '{}');
-    if (currentLoggedInUser.id === kycRequest.userId) {
-      currentLoggedInUser.kycVerified = true;
-      currentLoggedInUser.kycLevel = kycRequest.level;
-      currentLoggedInUser.kycApprovedDate = new Date().toISOString();
-      localStorage.setItem('user', JSON.stringify(currentLoggedInUser));
+  const handleRejectTransaction = async (transaction) => {
+    try {
+      // Reject transaction via API
+      await transactionService.rejectTransaction(transaction.id);
+      
+      // Update local state
+      setPendingTransactions(prev => prev.filter(t => t.id !== transaction.id));
+      
+      // Fallback to localStorage for compatibility
+      const localPendingTransactions = JSON.parse(localStorage.getItem('pendingTransactions') || '[]');
+      const updatedPending = localPendingTransactions.filter(t => t.id !== transaction.id);
+      localStorage.setItem('pendingTransactions', JSON.stringify(updatedPending));
+      
+      const localTransactions = JSON.parse(localStorage.getItem('transactions') || '[]');
+      const rejectedTransaction = {
+        ...transaction,
+        status: 'rejected',
+        completedDate: new Date().toISOString()
+      };
+      localStorage.setItem('transactions', JSON.stringify([rejectedTransaction, ...localTransactions]));
+      
+      // Dispatch event for other components
+      window.dispatchEvent(new Event('userDataChanged'));
+      
+      alert(`Transaction for ${transaction.userName} has been rejected`);
+    } catch (err) {
+      console.error('Error rejecting transaction:', err);
+      alert(`Failed to reject transaction: ${err.message}`);
     }
-    
-    // Update all users in localStorage
-    const allUsers = JSON.parse(localStorage.getItem('users') || '[]');
-    const adminUser = allUsers.find(user => user.email === 'admin@credox.com');
-    
-    localStorage.setItem('users', JSON.stringify([
-      ...updatedUsers,
-      adminUser || { email: 'admin@credox.com', isAdmin: true }
-    ]));
-    
-    // Remove from pending KYC
-    const updatedPendingKYC = pendingKYC.filter(k => k.id !== kycRequest.id);
-    setPendingKYC(updatedPendingKYC);
-    localStorage.setItem('pendingKYC', JSON.stringify(updatedPendingKYC));
-    
-    // Dispatch event to notify other components
-    window.dispatchEvent(new Event('userDataChanged'));
-    
-    alert(`KYC for ${kycRequest.userName} has been approved`);
   };
 
-  const handleRejectKYC = (kycRequest) => {
-    // Remove from pending KYC
-    const updatedPendingKYC = pendingKYC.filter(k => k.id !== kycRequest.id);
-    setPendingKYC(updatedPendingKYC);
-    localStorage.setItem('pendingKYC', JSON.stringify(updatedPendingKYC));
-    
-    // Dispatch event to notify other components
-    window.dispatchEvent(new Event('userDataChanged'));
-    
-    alert(`KYC for ${kycRequest.userName} has been rejected`);
+  const handleApproveKYC = async (kycRequest) => {
+    try {
+      // Approve KYC via API
+      await kycService.approveKYC(kycRequest.id);
+      
+      // Update local state
+      setPendingKYC(prev => prev.filter(k => k.id !== kycRequest.id));
+      
+      // Update users state
+      setUsers(prevUsers => 
+        prevUsers.map(user => {
+          if (user.id === kycRequest.userId) {
+            return {
+              ...user,
+              kycVerified: true,
+              kycLevel: kycRequest.level,
+              kycApprovedDate: new Date().toISOString()
+            };
+          }
+          return user;
+        })
+      );
+      
+      // Fallback to localStorage for compatibility
+      const localPendingKYC = JSON.parse(localStorage.getItem('pendingKYC') || '[]');
+      const updatedPendingKYC = localPendingKYC.filter(k => k.id !== kycRequest.id);
+      localStorage.setItem('pendingKYC', JSON.stringify(updatedPendingKYC));
+      
+      const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
+      const updatedLocalUsers = localUsers.map(user => {
+        if (user.id === kycRequest.userId) {
+          return {
+            ...user,
+            kycVerified: true,
+            kycLevel: kycRequest.level,
+            kycApprovedDate: new Date().toISOString()
+          };
+        }
+        return user;
+      });
+      localStorage.setItem('users', JSON.stringify(updatedLocalUsers));
+      
+      // Dispatch event for other components
+      window.dispatchEvent(new Event('userDataChanged'));
+      
+      alert(`KYC for ${kycRequest.userName} has been approved`);
+    } catch (err) {
+      console.error('Error approving KYC:', err);
+      alert(`Failed to approve KYC: ${err.message}`);
+    }
   };
+
+  const handleRejectKYC = async (kycRequest) => {
+    try {
+      // Reject KYC via API
+      await kycService.rejectKYC(kycRequest.id);
+      
+      // Update local state
+      setPendingKYC(prev => prev.filter(k => k.id !== kycRequest.id));
+      
+      // Fallback to localStorage for compatibility
+      const localPendingKYC = JSON.parse(localStorage.getItem('pendingKYC') || '[]');
+      const updatedPendingKYC = localPendingKYC.filter(k => k.id !== kycRequest.id);
+      localStorage.setItem('pendingKYC', JSON.stringify(updatedPendingKYC));
+      
+      // Dispatch event for other components
+      window.dispatchEvent(new Event('userDataChanged'));
+      
+      alert(`KYC for ${kycRequest.userName} has been rejected`);
+    } catch (err) {
+      console.error('Error rejecting KYC:', err);
+      alert(`Failed to reject KYC: ${err.message}`);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-6">Admin Dashboard</h1>
+      
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+          {error}
+        </div>
+      )}
       
       {/* Admin Tabs */}
       <div className="mb-6 border-b border-gray-200 overflow-x-auto">
