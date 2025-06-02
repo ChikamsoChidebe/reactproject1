@@ -35,10 +35,15 @@ const AdminPage = () => {
         // Fetch users from API
         const allUsers = await userService.getAllUsers();
         console.log("Users fetched:", allUsers);
-        console.log("User details:", JSON.stringify(allUsers, null, 2));
         
-        // Don't filter out admin user for now to see all users
-        setUsers(allUsers);
+        // If API returns no users or fails, fall back to localStorage immediately
+        if (!allUsers || allUsers.length === 0) {
+          const loadedUsers = JSON.parse(localStorage.getItem('users') || '[]');
+          setUsers(loadedUsers);
+          console.log("Using localStorage users:", loadedUsers);
+        } else {
+          setUsers(allUsers);
+        }
         
         // Fetch pending transactions
         const transactions = await transactionService.getPendingTransactions();

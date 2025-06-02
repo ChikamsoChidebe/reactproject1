@@ -12,39 +12,51 @@ const DashboardPage = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [transactions, setTransactions] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [localCashBalance, setLocalCashBalance] = useState(0);
+  const [realCashBalance, setRealCashBalance] = useState(0);
   const navigate = useNavigate();
+  
+  // Get real-time cash balance directly from localStorage
+  const getRealCashBalance = () => {
+    if (!currentUser) return 0;
+    
+    try {
+      const users = JSON.parse(localStorage.getItem('users') || '[]');
+      const user = users.find(u => u.id === currentUser.id);
+      if (user) {
+        return parseFloat(user.cashBalance || 0);
+      }
+    } catch (err) {
+      console.error('Error getting cash balance:', err);
+    }
+    return cashBalance; // Fallback to context value
+  };
   
   // Redirect if not logged in
   useEffect(() => {
     if (!currentUser) {
       navigate('/login');
+      return;
     }
+    
+    // Initial load of real cash balance
+    setRealCashBalance(getRealCashBalance());
     
     // Load transactions
     const loadTransactions = () => {
       const savedTransactions = JSON.parse(localStorage.getItem('transactions') || '[]');
-      const userTransactions = savedTransactions.filter(t => t.userId === currentUser?.id);
+      const userTransactions = savedTransactions.filter(t => t.userId === currentUser.id);
       setTransactions(userTransactions);
     };
     
+    loadTransactions();
+    
     // Function to refresh all data
     const refreshData = () => {
+      setRealCashBalance(getRealCashBalance());
       loadTransactions();
-      
-      // Get latest cash balance directly from localStorage
-      const users = JSON.parse(localStorage.getItem('users') || '[]');
-      const user = users.find(u => u.id === currentUser?.id);
-      if (user) {
-        setLocalCashBalance(parseFloat(user.cashBalance || 0));
-      }
-      
       setRefreshKey(prevKey => prevKey + 1);
-      console.log("Dashboard data refreshed");
+      console.log("Dashboard data refreshed, cash balance:", getRealCashBalance());
     };
-    
-    loadTransactions();
-    refreshData(); // Load initial data
     
     // Listen for changes in localStorage
     const handleStorageChange = (e) => {
@@ -61,14 +73,20 @@ const DashboardPage = () => {
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('userDataChanged', handleUserDataChanged);
     
+    // Set up polling for real-time updates
+    const intervalId = setInterval(() => {
+      setRealCashBalance(getRealCashBalance());
+    }, 2000);
+    
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('userDataChanged', handleUserDataChanged);
+      clearInterval(intervalId);
     };
-  }, [currentUser, navigate]);
+  }, [currentUser, navigate, cashBalance]);
   
-  // Use local cash balance if available, otherwise use the one from context
-  const effectiveCashBalance = localCashBalance > 0 ? localCashBalance : cashBalance;
+  // Use the real cash balance from localStorage
+  const effectiveCashBalance = realCashBalance;
   
   // Calculate total portfolio value - should be 0 if no cash balance
   const totalPortfolioValue = effectiveCashBalance === 0 ? 0 : positions.reduce((total, position) => {
@@ -99,18 +117,12 @@ const DashboardPage = () => {
   const handleWithdrawClick = () => {
     navigate('/withdraw');
   };
-
-  // Manual refresh button
+  
+  // Manual refresh button handler
   const handleRefresh = () => {
-    // Get latest cash balance directly from localStorage
-    const users = JSON.parse(localStorage.getItem('users') || '[]');
-    const user = users.find(u => u.id === currentUser?.id);
-    if (user) {
-      setLocalCashBalance(parseFloat(user.cashBalance || 0));
-    }
-    
+    setRealCashBalance(getRealCashBalance());
     setRefreshKey(prevKey => prevKey + 1);
-    console.log("Manual refresh triggered");
+    console.log("Manual refresh, cash balance:", getRealCashBalance());
   };
 
   if (!currentUser) {
@@ -272,13 +284,290 @@ const DashboardPage = () => {
             </div>
           </div>
           
-          {/* Rest of the component remains the same */}
-          {/* ... */}
+          {/* Watchlist */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-medium">Watchlist</h2>
+              <Link to="/markets" className="text-sm text-blue-600 hover:underline">View All</Link>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Symbol</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Change</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {getTopMovers().map((asset) => (
+                    <tr key={asset.symbol}>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="font-medium">{asset.symbol}</div>
+                        <div className="text-xs text-gray-500">{asset.name}</div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-right">
+                        ${asset.price.toFixed(2)}
+                      </td>
+                      <td className={`px-4 py-3 whitespace-nowrap text-right ${
+                        asset.changePercent >= 0 ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {asset.changePercent >= 0 ? '+' : ''}{asset.changePercent.toFixed(2)}%
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-right">
+                        <Link to={`/trading/${asset.symbol}`} className="text-blue-600 hover:underline mr-3">Trade</Link>
+                        <Link to={`/markets/${asset.symbol}`} className="text-blue-600 hover:underline">Chart</Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          
+          {/* Recent Activity */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-medium">Recent Activity</h2>
+              <button onClick={() => setActiveTab('history')} className="text-sm text-blue-600 hover:underline">View All</button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {transactions.slice(0, 5).map((transaction) => (
+                    <tr key={transaction.id}>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                        {new Date(transaction.date).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          transaction.type === 'deposit' 
+                            ? 'bg-green-100 text-green-800' 
+                            : transaction.type === 'withdrawal'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-blue-100 text-blue-800'
+                        }`}>
+                          {transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm">
+                        {transaction.type === 'deposit' 
+                          ? 'Deposit to account' 
+                          : transaction.type === 'withdrawal'
+                            ? 'Withdrawal from account'
+                            : `${transaction.side} ${transaction.symbol}`}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
+                        {transaction.type === 'withdrawal' ? '-' : ''}${parseFloat(transaction.amount).toFixed(2)}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          transaction.status === 'completed' 
+                            ? 'bg-green-100 text-green-800' 
+                            : transaction.status === 'pending'
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : 'bg-red-100 text-red-800'
+                        }`}>
+                          {transaction.status.charAt(0).toUpperCase() + transaction.status.slice(1)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {transactions.length === 0 && (
+                    <tr>
+                      <td colSpan="5" className="px-4 py-3 text-center text-gray-500">
+                        No recent activity
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
       
-      {/* Other tabs remain the same */}
-      {/* ... */}
+      {activeTab === 'positions' && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-lg font-medium mb-4">Open Positions</h2>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead>
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Symbol</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Side</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Entry Price</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Current Price</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Market Value</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">P&L</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {positions.map((position) => (
+                  <tr key={position.id}>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="font-medium">{position.symbol}</div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        position.side === 'LONG' 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {position.side}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-right">{position.quantity}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-right">${position.entryPrice.toFixed(2)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-right">${position.currentPrice.toFixed(2)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-right">${position.marketValue.toFixed(2)}</td>
+                    <td className={`px-4 py-3 whitespace-nowrap text-right ${
+                      position.unrealizedPL >= 0 ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {position.unrealizedPL >= 0 ? '+' : ''}${position.unrealizedPL.toFixed(2)}
+                      <br />
+                      <span className="text-xs">
+                        ({position.unrealizedPLPercent >= 0 ? '+' : ''}{position.unrealizedPLPercent.toFixed(2)}%)
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-right">
+                      <button className="text-red-600 hover:text-red-800">Close</button>
+                    </td>
+                  </tr>
+                ))}
+                {positions.length === 0 && (
+                  <tr>
+                    <td colSpan="8" className="px-4 py-3 text-center text-gray-500">
+                      No open positions
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      
+      {activeTab === 'orders' && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-lg font-medium mb-4">Open Orders</h2>
+          {cashBalance > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Symbol</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Side</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  <tr>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm">Jun 1, 2025</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm">AMZN</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm">
+                      <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">Buy</span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm">Limit</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right">2</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right">$140.00</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
+                      <button className="text-red-600 hover:text-red-800">Cancel</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              No open orders. Fund your account to start trading.
+            </div>
+          )}
+        </div>
+      )}
+      
+      {activeTab === 'history' && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-lg font-medium mb-4">Transaction History</h2>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead>
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {transactions.map((transaction) => (
+                  <tr key={transaction.id}>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm">
+                      {new Date(transaction.date).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm">
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        transaction.type === 'deposit' 
+                          ? 'bg-green-100 text-green-800' 
+                          : transaction.type === 'withdrawal'
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm">
+                      {transaction.type === 'deposit' 
+                        ? 'Deposit to account' 
+                        : transaction.type === 'withdrawal'
+                          ? 'Withdrawal from account'
+                          : `${transaction.side} ${transaction.symbol}`}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
+                      {transaction.type === 'withdrawal' ? '-' : ''}${parseFloat(transaction.amount).toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        transaction.status === 'completed' 
+                          ? 'bg-green-100 text-green-800' 
+                          : transaction.status === 'pending'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-red-100 text-red-800'
+                      }`}>
+                        {transaction.status.charAt(0).toUpperCase() + transaction.status.slice(1)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {transactions.length === 0 && (
+                  <tr>
+                    <td colSpan="5" className="px-4 py-3 text-center text-gray-500">
+                      No transaction history
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
