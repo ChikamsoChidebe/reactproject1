@@ -50,23 +50,32 @@ const RegisterPage = () => {
       
       console.log("Registering user:", userData);
       
-      // Try to register with API first
+      // Try to register with API first using direct fetch
       try {
-        const user = await authService.register(userData);
-        console.log("User registered with API:", user);
+        // First try to register with the backend API
+        console.log("Registering user with API:", userData);
+        const response = await fetch('https://credoxbackend.onrender.com/api/auth/register', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(userData)
+        });
         
-        // Register with local auth context
+        if (response.ok) {
+          console.log("User registered with API successfully");
+        } else {
+          console.error("Failed to register user with API:", await response.text());
+        }
+        
+        // Continue with local registration regardless of API result
         await register(userData);
-        
-        // Redirect to dashboard
         navigate('/dashboard');
       } catch (apiError) {
         console.error("API registration failed, falling back to local:", apiError);
         
         // Fallback to local registration
         await register(userData);
-        
-        // Redirect to dashboard
         navigate('/dashboard');
       }
     } catch (err) {
