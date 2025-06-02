@@ -11,6 +11,9 @@ const AdminPage = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [amount, setAmount] = useState('');
   const [transactionType, setTransactionType] = useState('deposit');
+  const [positionSymbol, setPositionSymbol] = useState('');
+  const [positionQuantity, setPositionQuantity] = useState('');
+  const [positionPrice, setPositionPrice] = useState('');
   const [pendingTransactions, setPendingTransactions] = useState([]);
   const [pendingKYC, setPendingKYC] = useState([]);
   const [activeTab, setActiveTab] = useState('users');
@@ -211,6 +214,86 @@ const AdminPage = () => {
     }
   };
 
+  const handleAddPosition = async () => {
+    if (!selectedUser || !positionSymbol || !positionQuantity || !positionPrice) {
+      alert('Please fill in all position fields');
+      return;
+    }
+    
+    try {
+      // Create a new position
+      const newPosition = {
+        id: `pos-${Date.now()}`,
+        symbol: positionSymbol.toUpperCase(),
+        name: getStockName(positionSymbol.toUpperCase()),
+        quantity: parseFloat(positionQuantity),
+        entryPrice: parseFloat(positionPrice),
+        currentPrice: parseFloat(positionPrice) * 1.01, // Slightly higher for demo
+        marketValue: parseFloat(positionQuantity) * parseFloat(positionPrice),
+        unrealizedPL: 0,
+        unrealizedPLPercent: 0,
+        side: 'LONG'
+      };
+      
+      // Calculate market value and P&L
+      newPosition.marketValue = newPosition.quantity * newPosition.currentPrice;
+      newPosition.unrealizedPL = (newPosition.currentPrice - newPosition.entryPrice) * newPosition.quantity;
+      newPosition.unrealizedPLPercent = (newPosition.currentPrice / newPosition.entryPrice - 1) * 100;
+      
+      // Get existing positions or initialize empty array
+      const existingPositions = JSON.parse(localStorage.getItem(`positions_${selectedUser.id}`) || '[]');
+      
+      // Add new position
+      const updatedPositions = [...existingPositions, newPosition];
+      
+      // Save to localStorage
+      localStorage.setItem(`positions_${selectedUser.id}`, JSON.stringify(updatedPositions));
+      
+      // Create a transaction record
+      const transaction = {
+        id: `transaction-${Date.now()}`,
+        userId: selectedUser.id,
+        userName: selectedUser.name,
+        type: 'trade',
+        side: 'buy',
+        symbol: positionSymbol.toUpperCase(),
+        quantity: parseFloat(positionQuantity),
+        price: parseFloat(positionPrice),
+        amount: parseFloat(positionQuantity) * parseFloat(positionPrice),
+        status: 'completed',
+        date: new Date().toISOString()
+      };
+      
+      await transactionService.createTransaction(transaction);
+      
+      // Reset form
+      setPositionSymbol('');
+      setPositionQuantity('');
+      setPositionPrice('');
+      
+      alert(`Position added to ${selectedUser.name}'s portfolio`);
+    } catch (err) {
+      console.error('Error adding position:', err);
+      alert(`Failed to add position: ${err.message}`);
+    }
+  };
+  
+  // Helper function to get stock name from symbol
+  const getStockName = (symbol) => {
+    const stockNames = {
+      'AAPL': 'Apple Inc.',
+      'MSFT': 'Microsoft Corporation',
+      'GOOGL': 'Alphabet Inc.',
+      'AMZN': 'Amazon.com Inc.',
+      'TSLA': 'Tesla Inc.',
+      'META': 'Meta Platforms Inc.',
+      'NFLX': 'Netflix Inc.',
+      'NVDA': 'NVIDIA Corporation'
+    };
+    
+    return stockNames[symbol] || `${symbol} Stock`;
+  };
+
   const handleRefresh = () => {
     // Manual refresh function
     const fetchData = async () => {
@@ -370,7 +453,7 @@ const AdminPage = () => {
               )}
               
               {selectedUser && (
-                <div className="border p-4 rounded-md">
+                <div className="border p-4 rounded-md mb-4">
                   <h3 className="font-medium mb-2">Update Balance</h3>
                   
                   <div className="mb-4">
@@ -426,6 +509,55 @@ const AdminPage = () => {
                     }}
                   >
                     Update Balance
+                  </button>
+                </div>
+              )}
+              
+              {selectedUser && (
+                <div className="border p-4 rounded-md">
+                  <h3 className="font-medium mb-2">Add Position</h3>
+                  
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Symbol</label>
+                    <input
+                      type="text"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      placeholder="AAPL"
+                      value={positionSymbol || ''}
+                      onChange={(e) => setPositionSymbol(e.target.value)}
+                    />
+                  </div>
+                  
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                    <input
+                      type="number"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      placeholder="10"
+                      value={positionQuantity || ''}
+                      onChange={(e) => setPositionQuantity(e.target.value)}
+                    />
+                  </div>
+                  
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Entry Price</label>
+                    <div className="flex">
+                      <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500">$</span>
+                      <input
+                        type="number"
+                        className="flex-1 min-w-0 block w-full px-3 py-2 rounded-none rounded-r-md border border-gray-300"
+                        placeholder="150.00"
+                        value={positionPrice || ''}
+                        onChange={(e) => setPositionPrice(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  
+                  <button
+                    className="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded"
+                    onClick={handleAddPosition}
+                  >
+                    Add Position
                   </button>
                 </div>
               )}

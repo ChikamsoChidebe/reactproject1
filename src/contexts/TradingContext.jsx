@@ -31,11 +31,12 @@ export const TradingProvider = ({ children }) => {
             setCashBalance(0);
           }
           
-          // For new users with zero balance, don't load any positions
-          if (!user || parseFloat(user.cashBalance || 0) === 0) {
-            setPositions([]);
-          } else {
-            // Only load positions for users with positive balance
+          // Load positions from localStorage
+          const userPositions = JSON.parse(localStorage.getItem(`positions_${currentUser.id}`) || '[]');
+          if (userPositions && userPositions.length > 0) {
+            setPositions(userPositions);
+          } else if (parseFloat(user?.cashBalance || 0) > 0) {
+            // Only load sample positions for users with positive balance
             setPositions([
               {
                 id: 'pos-1',
@@ -62,6 +63,8 @@ export const TradingProvider = ({ children }) => {
                 side: 'LONG'
               }
             ]);
+          } else {
+            setPositions([]);
           }
           
           // Load orders
@@ -86,7 +89,7 @@ export const TradingProvider = ({ children }) => {
     
     // Add event listener for storage changes
     const handleStorageChange = (e) => {
-      if (e.key === 'users' || e.key === 'transactions') {
+      if (e.key === 'users' || e.key === 'transactions' || e.key?.startsWith('positions_')) {
         loadUserData();
       }
     };
@@ -100,15 +103,9 @@ export const TradingProvider = ({ children }) => {
     
     window.addEventListener('userDataChanged', handleUserDataChanged);
     
-    // Create a polling mechanism to check for changes
-    const intervalId = setInterval(() => {
-      loadUserData();
-    }, 5000); // Check every 5 seconds
-    
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('userDataChanged', handleUserDataChanged);
-      clearInterval(intervalId);
     };
   }, [currentUser]);
 
