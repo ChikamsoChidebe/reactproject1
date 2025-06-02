@@ -15,11 +15,27 @@ const DashboardPage = () => {
   const [realCashBalance, setRealCashBalance] = useState(0);
   const navigate = useNavigate();
   
-  // Get real-time cash balance directly from localStorage
-  const getRealCashBalance = () => {
+  // Get real-time cash balance directly from localStorage and API
+  const getRealCashBalance = async () => {
     if (!currentUser) return 0;
     
     try {
+      // First try to get user from API
+      try {
+        const response = await fetch(`https://credoxbackend.onrender.com/api/users`);
+        if (response.ok) {
+          const apiUsers = await response.json();
+          const apiUser = apiUsers.find(u => u.id === currentUser.id);
+          if (apiUser) {
+            console.log("Got user from API:", apiUser);
+            return parseFloat(apiUser.cashBalance || 0);
+          }
+        }
+      } catch (apiErr) {
+        console.error("Error fetching user from API:", apiErr);
+      }
+      
+      // Fallback to localStorage
       const users = JSON.parse(localStorage.getItem('users') || '[]');
       const user = users.find(u => u.id === currentUser.id);
       if (user) {
@@ -39,7 +55,12 @@ const DashboardPage = () => {
     }
     
     // Initial load of real cash balance
-    setRealCashBalance(getRealCashBalance());
+    const fetchInitialData = async () => {
+      const balance = await getRealCashBalance();
+      setRealCashBalance(balance);
+    };
+    
+    fetchInitialData();
     
     // Load transactions
     const loadTransactions = () => {
@@ -51,11 +72,12 @@ const DashboardPage = () => {
     loadTransactions();
     
     // Function to refresh all data
-    const refreshData = () => {
-      setRealCashBalance(getRealCashBalance());
+    const refreshData = async () => {
+      const balance = await getRealCashBalance();
+      setRealCashBalance(balance);
       loadTransactions();
       setRefreshKey(prevKey => prevKey + 1);
-      console.log("Dashboard data refreshed, cash balance:", getRealCashBalance());
+      console.log("Dashboard data refreshed, cash balance:", balance);
     };
     
     // Listen for changes in localStorage
@@ -75,8 +97,8 @@ const DashboardPage = () => {
     
     // Set up polling for real-time updates
     const intervalId = setInterval(() => {
-      setRealCashBalance(getRealCashBalance());
-    }, 2000);
+      refreshData();
+    }, 5000); // Check every 5 seconds
     
     return () => {
       window.removeEventListener('storage', handleStorageChange);
@@ -119,10 +141,11 @@ const DashboardPage = () => {
   };
   
   // Manual refresh button handler
-  const handleRefresh = () => {
-    setRealCashBalance(getRealCashBalance());
+  const handleRefresh = async () => {
+    const balance = await getRealCashBalance();
+    setRealCashBalance(balance);
     setRefreshKey(prevKey => prevKey + 1);
-    console.log("Manual refresh, cash balance:", getRealCashBalance());
+    console.log("Manual refresh, cash balance:", balance);
   };
 
   if (!currentUser) {
