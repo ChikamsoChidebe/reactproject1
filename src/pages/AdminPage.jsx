@@ -16,7 +16,6 @@ const AdminPage = () => {
   const [activeTab, setActiveTab] = useState('users');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [lastRefresh, setLastRefresh] = useState(Date.now());
 
   // Check if user is admin
   useEffect(() => {
@@ -65,13 +64,8 @@ const AdminPage = () => {
     
     fetchData();
     
-    // Set up polling for real-time updates
-    const intervalId = setInterval(() => {
-      setLastRefresh(Date.now());
-    }, 10000); // Poll every 10 seconds
-    
-    return () => clearInterval(intervalId);
-  }, [currentUser, navigate, lastRefresh]);
+    // No automatic polling - removed to prevent constant refreshing
+  }, [currentUser, navigate]);
 
   const handleUpdateBalance = async () => {
     if (!selectedUser || !amount || isNaN(parseFloat(amount))) return;
@@ -116,9 +110,6 @@ const AdminPage = () => {
         cashBalance: parseFloat(prev.cashBalance || 0) + amountValue
       }));
       
-      // Trigger refresh
-      setLastRefresh(Date.now());
-      
       setAmount('');
       alert(`Successfully updated ${selectedUser.name}'s balance`);
     } catch (err) {
@@ -153,9 +144,6 @@ const AdminPage = () => {
         })
       );
       
-      // Trigger refresh
-      setLastRefresh(Date.now());
-      
       alert(`Transaction for ${transaction.userName} has been approved`);
     } catch (err) {
       console.error('Error approving transaction:', err);
@@ -170,9 +158,6 @@ const AdminPage = () => {
       
       // Update local state
       setPendingTransactions(prev => prev.filter(t => t.id !== transaction.id));
-      
-      // Trigger refresh
-      setLastRefresh(Date.now());
       
       alert(`Transaction for ${transaction.userName} has been rejected`);
     } catch (err) {
@@ -204,9 +189,6 @@ const AdminPage = () => {
         })
       );
       
-      // Trigger refresh
-      setLastRefresh(Date.now());
-      
       alert(`KYC for ${kycRequest.userName} has been approved`);
     } catch (err) {
       console.error('Error approving KYC:', err);
@@ -222,9 +204,6 @@ const AdminPage = () => {
       // Update local state
       setPendingKYC(prev => prev.filter(k => k.id !== kycRequest.id));
       
-      // Trigger refresh
-      setLastRefresh(Date.now());
-      
       alert(`KYC for ${kycRequest.userName} has been rejected`);
     } catch (err) {
       console.error('Error rejecting KYC:', err);
@@ -233,7 +212,43 @@ const AdminPage = () => {
   };
 
   const handleRefresh = () => {
-    setLastRefresh(Date.now());
+    // Manual refresh function
+    const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        console.log("Manually refreshing data...");
+        // Fetch users from API
+        const allUsers = await userService.getAllUsers();
+        setUsers(allUsers);
+        
+        // Fetch pending transactions
+        const transactions = await transactionService.getPendingTransactions();
+        setPendingTransactions(transactions);
+        
+        // Fetch pending KYC
+        const kyc = await kycService.getPendingKYC();
+        setPendingKYC(kyc);
+      } catch (err) {
+        console.error('Error fetching data:', err);
+        setError('Failed to load data. Falling back to local data.');
+        
+        // Fallback to localStorage
+        const loadedUsers = JSON.parse(localStorage.getItem('users') || '[]');
+        setUsers(loadedUsers.filter(user => user.email !== 'admin@credox.com'));
+        
+        const localTransactions = JSON.parse(localStorage.getItem('pendingTransactions') || '[]');
+        setPendingTransactions(localTransactions);
+        
+        const localKYC = JSON.parse(localStorage.getItem('pendingKYC') || '[]');
+        setPendingKYC(localKYC);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchData();
   };
 
   if (isLoading) {
