@@ -4,33 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import AdminDashboardCharts from '../components/charts/AdminDashboardCharts';
 import { userService, transactionService, kycService } from '../services/api';
 
-// Create admin account if it doesn't exist
-const createAdminIfNeeded = () => {
-  const users = JSON.parse(localStorage.getItem('users') || '[]');
-  const adminExists = users.some(user => user.email === 'admin@credox.com');
-  
-  if (!adminExists) {
-    const adminUser = {
-      id: 'admin-user',
-      name: 'Admin',
-      email: 'admin@credox.com',
-      password: 'admin123', // In a real app, use a secure password
-      accountId: 'CR-ADMIN',
-      accountType: 'Admin',
-      joinDate: new Date().toISOString().split('T')[0],
-      isAdmin: true,
-      cashBalance: 1000000
-    };
-    
-    users.push(adminUser);
-    localStorage.setItem('users', JSON.stringify(users));
-    console.log('Admin account created');
-  }
-};
-
-// Call this function when the file is loaded
-createAdminIfNeeded();
-
 const AdminPage = () => {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
@@ -43,6 +16,7 @@ const AdminPage = () => {
   const [activeTab, setActiveTab] = useState('users');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [lastRefresh, setLastRefresh] = useState(Date.now());
 
   // Check if user is admin
   useEffect(() => {
@@ -55,8 +29,10 @@ const AdminPage = () => {
       setError(null);
       
       try {
+        console.log("Fetching users from API...");
         // Fetch users from API
         const allUsers = await userService.getAllUsers();
+        console.log("Users fetched:", allUsers);
         setUsers(allUsers.filter(user => user.email !== 'admin@credox.com'));
         
         // Fetch pending transactions
@@ -88,11 +64,11 @@ const AdminPage = () => {
     
     // Set up polling for real-time updates
     const intervalId = setInterval(() => {
-      fetchData();
+      setLastRefresh(Date.now());
     }, 10000); // Poll every 10 seconds
     
     return () => clearInterval(intervalId);
-  }, [currentUser, navigate]);
+  }, [currentUser, navigate, lastRefresh]);
 
   const handleUpdateBalance = async () => {
     if (!selectedUser || !amount || isNaN(parseFloat(amount))) return;
@@ -137,28 +113,8 @@ const AdminPage = () => {
         cashBalance: parseFloat(prev.cashBalance || 0) + amountValue
       }));
       
-      // Fallback to localStorage for compatibility
-      const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
-      const updatedLocalUsers = localUsers.map(user => {
-        if (user.id === selectedUser.id) {
-          const currentBalance = parseFloat(user.cashBalance || 0);
-          const newBalance = currentBalance + amountValue;
-          return {
-            ...user,
-            cashBalance: newBalance >= 0 ? newBalance : 0
-          };
-        }
-        return user;
-      });
-      
-      localStorage.setItem('users', JSON.stringify(updatedLocalUsers));
-      
-      // Update localStorage transactions
-      const localTransactions = JSON.parse(localStorage.getItem('transactions') || '[]');
-      localStorage.setItem('transactions', JSON.stringify([transaction, ...localTransactions]));
-      
-      // Dispatch event for other components
-      window.dispatchEvent(new Event('userDataChanged'));
+      // Trigger refresh
+      setLastRefresh(Date.now());
       
       setAmount('');
       alert(`Successfully updated ${selectedUser.name}'s balance`);
@@ -194,38 +150,8 @@ const AdminPage = () => {
         })
       );
       
-      // Fallback to localStorage for compatibility
-      const localPendingTransactions = JSON.parse(localStorage.getItem('pendingTransactions') || '[]');
-      const updatedPending = localPendingTransactions.filter(t => t.id !== transaction.id);
-      localStorage.setItem('pendingTransactions', JSON.stringify(updatedPending));
-      
-      const localTransactions = JSON.parse(localStorage.getItem('transactions') || '[]');
-      const completedTransaction = {
-        ...transaction,
-        status: 'completed',
-        completedDate: new Date().toISOString()
-      };
-      localStorage.setItem('transactions', JSON.stringify([completedTransaction, ...localTransactions]));
-      
-      const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
-      const updatedLocalUsers = localUsers.map(user => {
-        if (user.id === transaction.userId) {
-          const currentBalance = parseFloat(user.cashBalance || 0);
-          const newBalance = transaction.type === 'deposit' 
-            ? (currentBalance + parseFloat(transaction.amount))
-            : (currentBalance - parseFloat(transaction.amount));
-          
-          return {
-            ...user,
-            cashBalance: newBalance >= 0 ? newBalance : 0
-          };
-        }
-        return user;
-      });
-      localStorage.setItem('users', JSON.stringify(updatedLocalUsers));
-      
-      // Dispatch event for other components
-      window.dispatchEvent(new Event('userDataChanged'));
+      // Trigger refresh
+      setLastRefresh(Date.now());
       
       alert(`Transaction for ${transaction.userName} has been approved`);
     } catch (err) {
@@ -242,21 +168,8 @@ const AdminPage = () => {
       // Update local state
       setPendingTransactions(prev => prev.filter(t => t.id !== transaction.id));
       
-      // Fallback to localStorage for compatibility
-      const localPendingTransactions = JSON.parse(localStorage.getItem('pendingTransactions') || '[]');
-      const updatedPending = localPendingTransactions.filter(t => t.id !== transaction.id);
-      localStorage.setItem('pendingTransactions', JSON.stringify(updatedPending));
-      
-      const localTransactions = JSON.parse(localStorage.getItem('transactions') || '[]');
-      const rejectedTransaction = {
-        ...transaction,
-        status: 'rejected',
-        completedDate: new Date().toISOString()
-      };
-      localStorage.setItem('transactions', JSON.stringify([rejectedTransaction, ...localTransactions]));
-      
-      // Dispatch event for other components
-      window.dispatchEvent(new Event('userDataChanged'));
+      // Trigger refresh
+      setLastRefresh(Date.now());
       
       alert(`Transaction for ${transaction.userName} has been rejected`);
     } catch (err) {
@@ -288,27 +201,8 @@ const AdminPage = () => {
         })
       );
       
-      // Fallback to localStorage for compatibility
-      const localPendingKYC = JSON.parse(localStorage.getItem('pendingKYC') || '[]');
-      const updatedPendingKYC = localPendingKYC.filter(k => k.id !== kycRequest.id);
-      localStorage.setItem('pendingKYC', JSON.stringify(updatedPendingKYC));
-      
-      const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
-      const updatedLocalUsers = localUsers.map(user => {
-        if (user.id === kycRequest.userId) {
-          return {
-            ...user,
-            kycVerified: true,
-            kycLevel: kycRequest.level,
-            kycApprovedDate: new Date().toISOString()
-          };
-        }
-        return user;
-      });
-      localStorage.setItem('users', JSON.stringify(updatedLocalUsers));
-      
-      // Dispatch event for other components
-      window.dispatchEvent(new Event('userDataChanged'));
+      // Trigger refresh
+      setLastRefresh(Date.now());
       
       alert(`KYC for ${kycRequest.userName} has been approved`);
     } catch (err) {
@@ -325,19 +219,18 @@ const AdminPage = () => {
       // Update local state
       setPendingKYC(prev => prev.filter(k => k.id !== kycRequest.id));
       
-      // Fallback to localStorage for compatibility
-      const localPendingKYC = JSON.parse(localStorage.getItem('pendingKYC') || '[]');
-      const updatedPendingKYC = localPendingKYC.filter(k => k.id !== kycRequest.id);
-      localStorage.setItem('pendingKYC', JSON.stringify(updatedPendingKYC));
-      
-      // Dispatch event for other components
-      window.dispatchEvent(new Event('userDataChanged'));
+      // Trigger refresh
+      setLastRefresh(Date.now());
       
       alert(`KYC for ${kycRequest.userName} has been rejected`);
     } catch (err) {
       console.error('Error rejecting KYC:', err);
       alert(`Failed to reject KYC: ${err.message}`);
     }
+  };
+
+  const handleRefresh = () => {
+    setLastRefresh(Date.now());
   };
 
   if (isLoading) {
@@ -352,7 +245,18 @@ const AdminPage = () => {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-6">Admin Dashboard</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+        <button 
+          onClick={handleRefresh}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded flex items-center"
+        >
+          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+          </svg>
+          Refresh Data
+        </button>
+      </div>
       
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
@@ -408,7 +312,7 @@ const AdminPage = () => {
       
       {activeTab === 'users' && (
         <>
-          <AdminDashboardCharts users={users} transactions={JSON.parse(localStorage.getItem('transactions') || '[]')} />
+          <AdminDashboardCharts users={users} transactions={[]} />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* User Management */}
             <div className="bg-white rounded-lg shadow p-6">
@@ -511,7 +415,7 @@ const AdminPage = () => {
             
             {/* All Users */}
             <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold mb-4">All Users</h2>
+              <h2 className="text-xl font-semibold mb-4">All Users ({users.length})</h2>
               
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
@@ -524,20 +428,28 @@ const AdminPage = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {users.map((user) => (
-                      <tr key={user.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedUser(user)}>
-                        <td className="px-4 py-3 whitespace-nowrap">{user.name}</td>
-                        <td className="px-4 py-3 whitespace-nowrap">{user.email}</td>
-                        <td className="px-4 py-3 whitespace-nowrap text-right">${parseFloat(user.cashBalance || 0).toFixed(2)}</td>
-                        <td className="px-4 py-3 whitespace-nowrap text-center">
-                          {user.kycVerified ? (
-                            <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">Verified</span>
-                          ) : (
-                            <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">Not Verified</span>
-                          )}
+                    {users.length > 0 ? (
+                      users.map((user) => (
+                        <tr key={user.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedUser(user)}>
+                          <td className="px-4 py-3 whitespace-nowrap">{user.name}</td>
+                          <td className="px-4 py-3 whitespace-nowrap">{user.email}</td>
+                          <td className="px-4 py-3 whitespace-nowrap text-right">${parseFloat(user.cashBalance || 0).toFixed(2)}</td>
+                          <td className="px-4 py-3 whitespace-nowrap text-center">
+                            {user.kycVerified ? (
+                              <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">Verified</span>
+                            ) : (
+                              <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">Not Verified</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="4" className="px-4 py-3 text-center text-gray-500">
+                          No users found. Try refreshing the page.
                         </td>
                       </tr>
-                    ))}
+                    )}
                   </tbody>
                 </table>
               </div>
