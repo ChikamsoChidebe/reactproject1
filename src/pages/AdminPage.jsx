@@ -32,38 +32,53 @@ const AdminPage = () => {
       navigate('/dashboard');
     }
     
-    const fetchData = async () => {
-      setIsLoading(true);
-      
-      try {
-        // Try to fetch users from the backend API
-        const allUsers = await userService.getAllUsers();
-        console.log("Users from API:", allUsers);
-        
-        // If API returns users, use them
-        if (allUsers && allUsers.length > 0) {
-          setUsers(allUsers.filter(user => user.email !== 'admin@credox.com'));
-        } else {
-          // Fallback to localStorage
-          const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
-          setUsers(localUsers.filter(user => user.email !== 'admin@credox.com'));
-        }
-        
-        // Load pending transactions and KYC
-        const localTransactions = JSON.parse(localStorage.getItem('pendingTransactions') || '[]');
-        setPendingTransactions(localTransactions);
-        
-        const localKYC = JSON.parse(localStorage.getItem('pendingKYC') || '[]');
-        setPendingKYC(localKYC);
-      } catch (err) {
-        console.error("Error fetching users:", err);
-        // Fallback to localStorage
-        const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
-        setUsers(localUsers.filter(user => user.email !== 'admin@credox.com'));
-      } finally {
-        setIsLoading(false);
+    // Replace the fetchData function in useEffect with this:
+const fetchData = async () => {
+  setIsLoading(true);
+  
+  // Always load local users first as a fallback
+  const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
+  const filteredLocalUsers = localUsers.filter(user => user.email !== 'admin@credox.com');
+  
+  // Set users from localStorage immediately
+  setUsers(filteredLocalUsers);
+  
+  try {
+    // Then try to fetch from API
+    console.log("Fetching users from API:", 'https://credoxbackend.onrender.com/api/users');
+    const response = await fetch('https://credoxbackend.onrender.com/api/users', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
       }
-    };
+    });
+    
+    if (response.ok) {
+      const apiUsers = await response.json();
+      console.log("Users from API direct fetch:", apiUsers);
+      
+      if (apiUsers && apiUsers.length > 0) {
+        // Update with API users if available
+        setUsers(apiUsers.filter(user => user.email !== 'admin@credox.com'));
+      }
+    } else {
+      console.error("API response not OK:", response.status);
+    }
+  } catch (err) {
+    console.error("Error fetching users:", err);
+  } finally {
+    setIsLoading(false);
+  }
+  
+  // Load other data
+  const localTransactions = JSON.parse(localStorage.getItem('pendingTransactions') || '[]');
+  setPendingTransactions(localTransactions);
+  
+  const localKYC = JSON.parse(localStorage.getItem('pendingKYC') || '[]');
+  setPendingKYC(localKYC);
+};
+
     
     fetchData();
   }, [currentUser, navigate]);
@@ -403,36 +418,49 @@ const AdminPage = () => {
   const handleRefresh = async () => {
     setIsLoading(true);
     
+    // Always load local users first as a fallback
+    const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
+    const filteredLocalUsers = localUsers.filter(user => user.email !== 'admin@credox.com');
+    
+    // Set users from localStorage immediately
+    setUsers(filteredLocalUsers);
+    
     try {
-      // Try to fetch users from the backend API
-      const allUsers = await userService.getAllUsers();
-      console.log("Users from API (refresh):", allUsers);
+      // Then try to fetch from API directly
+      console.log("Fetching users from API (refresh):", 'https://credoxbackend.onrender.com/api/users');
+      const response = await fetch('https://credoxbackend.onrender.com/api/users', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
       
-      // If API returns users, use them
-      if (allUsers && allUsers.length > 0) {
-        setUsers(allUsers.filter(user => user.email !== 'admin@credox.com'));
+      if (response.ok) {
+        const apiUsers = await response.json();
+        console.log("Users from API direct fetch (refresh):", apiUsers);
+        
+        if (apiUsers && apiUsers.length > 0) {
+          // Update with API users if available
+          setUsers(apiUsers.filter(user => user.email !== 'admin@credox.com'));
+        }
       } else {
-        // Fallback to localStorage
-        const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
-        setUsers(localUsers.filter(user => user.email !== 'admin@credox.com'));
+        console.error("API response not OK (refresh):", response.status);
       }
-      
-      // Load pending transactions and KYC
-      const localTransactions = JSON.parse(localStorage.getItem('pendingTransactions') || '[]');
-      setPendingTransactions(localTransactions);
-      
-      const localKYC = JSON.parse(localStorage.getItem('pendingKYC') || '[]');
-      setPendingKYC(localKYC);
-      
-      console.log("Admin page refreshed with API users");
     } catch (err) {
       console.error("Error refreshing users:", err);
-      // Fallback to localStorage
-      const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
-      setUsers(localUsers.filter(user => user.email !== 'admin@credox.com'));
     } finally {
       setIsLoading(false);
     }
+    
+    // Load other data
+    const localTransactions = JSON.parse(localStorage.getItem('pendingTransactions') || '[]');
+    setPendingTransactions(localTransactions);
+    
+    const localKYC = JSON.parse(localStorage.getItem('pendingKYC') || '[]');
+    setPendingKYC(localKYC);
+    
+    console.log("Admin page refreshed");
   };
 
   if (isLoading) {
