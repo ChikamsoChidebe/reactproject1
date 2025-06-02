@@ -20,11 +20,21 @@ const DashboardPage = () => {
     if (!currentUser) return 0;
     
     try {
-      // First try to get user from API
+      // First check localStorage which is more reliable
+      const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
+      const localUser = localUsers.find(u => u.id === currentUser.id);
+      if (localUser && parseFloat(localUser.cashBalance || 0) > 0) {
+        const balance = parseFloat(localUser.cashBalance || 0);
+        console.log("Got balance from localStorage:", balance);
+        return balance;
+      }
+      
+      // Then try API
       try {
         const response = await fetch(`https://credoxbackend.onrender.com/api/users`);
         if (response.ok) {
           const apiUsers = await response.json();
+          console.log("All API users:", apiUsers);
           const apiUser = apiUsers.find(u => u.id === currentUser.id);
           if (apiUser) {
             console.log("Got user from API:", apiUser);
@@ -34,17 +44,12 @@ const DashboardPage = () => {
       } catch (apiErr) {
         console.error("Error fetching user from API:", apiErr);
       }
-      
-      // Fallback to localStorage
-      const users = JSON.parse(localStorage.getItem('users') || '[]');
-      const user = users.find(u => u.id === currentUser.id);
-      if (user) {
-        return parseFloat(user.cashBalance || 0);
-      }
     } catch (err) {
       console.error('Error getting cash balance:', err);
     }
-    return cashBalance; // Fallback to context value
+    
+    // Last resort - use context value
+    return cashBalance;
   };
   
   // Redirect if not logged in
@@ -56,7 +61,22 @@ const DashboardPage = () => {
     
     // Initial load of real cash balance
     const fetchInitialData = async () => {
+      // Force a direct check of localStorage first
+      const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
+      const localUser = localUsers.find(u => u.id === currentUser.id);
+      if (localUser) {
+        console.log("Local user data on init:", localUser);
+        const localBalance = parseFloat(localUser.cashBalance || 0);
+        if (localBalance > 0) {
+          console.log("Setting initial balance from localStorage:", localBalance);
+          setRealCashBalance(localBalance);
+          return;
+        }
+      }
+      
+      // If no valid balance in localStorage, try API
       const balance = await getRealCashBalance();
+      console.log("Setting initial balance from API:", balance);
       setRealCashBalance(balance);
     };
     
@@ -73,11 +93,26 @@ const DashboardPage = () => {
     
     // Function to refresh all data
     const refreshData = async () => {
-      const balance = await getRealCashBalance();
-      setRealCashBalance(balance);
+      // Force a direct check of localStorage first for immediate updates
+      const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
+      const localUser = localUsers.find(u => u.id === currentUser.id);
+      if (localUser) {
+        console.log("Local user data on refresh:", localUser);
+        const localBalance = parseFloat(localUser.cashBalance || 0);
+        if (localBalance > 0) {
+          console.log("Setting refreshed balance from localStorage:", localBalance);
+          setRealCashBalance(localBalance);
+        } else {
+          // If no valid balance in localStorage, try API
+          const balance = await getRealCashBalance();
+          console.log("Setting refreshed balance from API:", balance);
+          setRealCashBalance(balance);
+        }
+      }
+      
       loadTransactions();
       setRefreshKey(prevKey => prevKey + 1);
-      console.log("Dashboard data refreshed, cash balance:", balance);
+      console.log("Dashboard data refreshed");
     };
     
     // Listen for changes in localStorage
@@ -107,8 +142,9 @@ const DashboardPage = () => {
     };
   }, [currentUser, navigate, cashBalance]);
   
-  // Use the real cash balance from localStorage
+  // Use the real cash balance from localStorage or API
   const effectiveCashBalance = realCashBalance;
+  console.log("Effective cash balance:", effectiveCashBalance);
   
   // Calculate total portfolio value - should be 0 if no cash balance
   const totalPortfolioValue = effectiveCashBalance === 0 ? 0 : positions.reduce((total, position) => {
