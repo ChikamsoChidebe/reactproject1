@@ -4,6 +4,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { MarketDataProvider } from './contexts/MarketDataContext';
 import { TradingProvider } from './contexts/TradingContext';
 import { NotificationProvider } from './contexts/NotificationContext';
+import TestApiPage from './pages/TestApiPage';
 
 // Import pages
 import HomePage from './pages/HomePage';
@@ -112,7 +113,8 @@ function App() {
                       <KYCPage />
                     </ProtectedRoute>
                   } />
-                  <Route path="*" element={<Navigate to="/" replace />} />
+                  <Route path="/test-api" element={<TestApiPage />} />
+  <Route path="*" element={<Navigate to="/" replace />} />
                 </Route>
               </Routes>
             </TradingProvider>
