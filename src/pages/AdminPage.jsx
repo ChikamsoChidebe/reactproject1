@@ -20,59 +20,31 @@ const AdminPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Load users directly from localStorage
+  const loadLocalUsers = () => {
+    const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
+    return localUsers.filter(user => user.email !== 'admin@credox.com');
+  };
+
   // Check if user is admin
   useEffect(() => {
     if (!currentUser || currentUser.email !== 'admin@credox.com') {
       navigate('/dashboard');
     }
     
-    const fetchData = async () => {
-      setIsLoading(true);
-      setError(null);
-      
-      try {
-        console.log("Fetching users from API...");
-        // Fetch users from API
-        const allUsers = await userService.getAllUsers();
-        console.log("Users fetched:", allUsers);
-        
-        // If API returns no users or fails, fall back to localStorage immediately
-        if (!allUsers || allUsers.length === 0) {
-          const loadedUsers = JSON.parse(localStorage.getItem('users') || '[]');
-          setUsers(loadedUsers);
-          console.log("Using localStorage users:", loadedUsers);
-        } else {
-          setUsers(allUsers);
-        }
-        
-        // Fetch pending transactions
-        const transactions = await transactionService.getPendingTransactions();
-        setPendingTransactions(transactions);
-        
-        // Fetch pending KYC
-        const kyc = await kycService.getPendingKYC();
-        setPendingKYC(kyc);
-      } catch (err) {
-        console.error('Error fetching data:', err);
-        setError('Failed to load data. Falling back to local data.');
-        
-        // Fallback to localStorage
-        const loadedUsers = JSON.parse(localStorage.getItem('users') || '[]');
-        setUsers(loadedUsers.filter(user => user.email !== 'admin@credox.com'));
-        
-        const localTransactions = JSON.parse(localStorage.getItem('pendingTransactions') || '[]');
-        setPendingTransactions(localTransactions);
-        
-        const localKYC = JSON.parse(localStorage.getItem('pendingKYC') || '[]');
-        setPendingKYC(localKYC);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    // Load users directly from localStorage on mount
+    setUsers(loadLocalUsers());
     
-    fetchData();
+    // Load pending transactions
+    const localTransactions = JSON.parse(localStorage.getItem('pendingTransactions') || '[]');
+    setPendingTransactions(localTransactions);
     
-    // No automatic polling - removed to prevent constant refreshing
+    // Load pending KYC
+    const localKYC = JSON.parse(localStorage.getItem('pendingKYC') || '[]');
+    setPendingKYC(localKYC);
+    
+    setIsLoading(false);
+    
   }, [currentUser, navigate]);
 
   const handleUpdateBalance = async () => {
@@ -108,9 +80,6 @@ const AdminPage = () => {
         localStorage.setItem('user', JSON.stringify(currentLoggedInUser));
       }
       
-      // Dispatch event to notify other components
-      window.dispatchEvent(new Event('userDataChanged'));
-      
       // Create transaction record
       const transaction = {
         id: `transaction-${Date.now()}`,
@@ -143,104 +112,14 @@ const AdminPage = () => {
         cashBalance: parseFloat(prev.cashBalance || 0) + amountValue
       }));
       
+      // Dispatch event to notify other components
+      window.dispatchEvent(new Event('userDataChanged'));
+      
       setAmount('');
       alert(`Successfully updated ${selectedUser.name}'s balance`);
     } catch (err) {
       console.error('Error updating balance:', err);
       alert(`Failed to update balance: ${err.message}`);
-    }
-  };
-
-  const handleApproveTransaction = async (transaction) => {
-    try {
-      // Approve transaction via API
-      await transactionService.approveTransaction(transaction.id);
-      
-      // Update local state
-      setPendingTransactions(prev => prev.filter(t => t.id !== transaction.id));
-      
-      // Update users state
-      setUsers(prevUsers => 
-        prevUsers.map(user => {
-          if (user.id === transaction.userId) {
-            const currentBalance = parseFloat(user.cashBalance || 0);
-            const newBalance = transaction.type === 'deposit' 
-              ? (currentBalance + parseFloat(transaction.amount))
-              : (currentBalance - parseFloat(transaction.amount));
-            
-            return {
-              ...user,
-              cashBalance: newBalance >= 0 ? newBalance : 0
-            };
-          }
-          return user;
-        })
-      );
-      
-      alert(`Transaction for ${transaction.userName} has been approved`);
-    } catch (err) {
-      console.error('Error approving transaction:', err);
-      alert(`Failed to approve transaction: ${err.message}`);
-    }
-  };
-
-  const handleRejectTransaction = async (transaction) => {
-    try {
-      // Reject transaction via API
-      await transactionService.rejectTransaction(transaction.id);
-      
-      // Update local state
-      setPendingTransactions(prev => prev.filter(t => t.id !== transaction.id));
-      
-      alert(`Transaction for ${transaction.userName} has been rejected`);
-    } catch (err) {
-      console.error('Error rejecting transaction:', err);
-      alert(`Failed to reject transaction: ${err.message}`);
-    }
-  };
-
-  const handleApproveKYC = async (kycRequest) => {
-    try {
-      // Approve KYC via API
-      await kycService.approveKYC(kycRequest.id);
-      
-      // Update local state
-      setPendingKYC(prev => prev.filter(k => k.id !== kycRequest.id));
-      
-      // Update users state
-      setUsers(prevUsers => 
-        prevUsers.map(user => {
-          if (user.id === kycRequest.userId) {
-            return {
-              ...user,
-              kycVerified: true,
-              kycLevel: kycRequest.level,
-              kycApprovedDate: new Date().toISOString()
-            };
-          }
-          return user;
-        })
-      );
-      
-      alert(`KYC for ${kycRequest.userName} has been approved`);
-    } catch (err) {
-      console.error('Error approving KYC:', err);
-      alert(`Failed to approve KYC: ${err.message}`);
-    }
-  };
-
-  const handleRejectKYC = async (kycRequest) => {
-    try {
-      // Reject KYC via API
-      await kycService.rejectKYC(kycRequest.id);
-      
-      // Update local state
-      setPendingKYC(prev => prev.filter(k => k.id !== kycRequest.id));
-      
-      alert(`KYC for ${kycRequest.userName} has been rejected`);
-    } catch (err) {
-      console.error('Error rejecting KYC:', err);
-      alert(`Failed to reject KYC: ${err.message}`);
     }
   };
 
@@ -327,44 +206,192 @@ const AdminPage = () => {
     return stockNames[symbol] || `${symbol} Stock`;
   };
 
-  const handleRefresh = () => {
-    // Manual refresh function
-    const fetchData = async () => {
-      setIsLoading(true);
-      setError(null);
+  const handleApproveTransaction = async (transaction) => {
+    try {
+      // Approve transaction via API
+      await transactionService.approveTransaction(transaction.id);
       
-      try {
-        console.log("Manually refreshing data...");
-        // Fetch users from API
-        const allUsers = await userService.getAllUsers();
-        setUsers(allUsers);
-        
-        // Fetch pending transactions
-        const transactions = await transactionService.getPendingTransactions();
-        setPendingTransactions(transactions);
-        
-        // Fetch pending KYC
-        const kyc = await kycService.getPendingKYC();
-        setPendingKYC(kyc);
-      } catch (err) {
-        console.error('Error fetching data:', err);
-        setError('Failed to load data. Falling back to local data.');
-        
-        // Fallback to localStorage
-        const loadedUsers = JSON.parse(localStorage.getItem('users') || '[]');
-        setUsers(loadedUsers.filter(user => user.email !== 'admin@credox.com'));
-        
-        const localTransactions = JSON.parse(localStorage.getItem('pendingTransactions') || '[]');
-        setPendingTransactions(localTransactions);
-        
-        const localKYC = JSON.parse(localStorage.getItem('pendingKYC') || '[]');
-        setPendingKYC(localKYC);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+      // Update local state
+      setPendingTransactions(prev => prev.filter(t => t.id !== transaction.id));
+      
+      // Update users state
+      setUsers(prevUsers => 
+        prevUsers.map(user => {
+          if (user.id === transaction.userId) {
+            const currentBalance = parseFloat(user.cashBalance || 0);
+            const newBalance = transaction.type === 'deposit' 
+              ? (currentBalance + parseFloat(transaction.amount))
+              : (currentBalance - parseFloat(transaction.amount));
+            
+            return {
+              ...user,
+              cashBalance: newBalance >= 0 ? newBalance : 0
+            };
+          }
+          return user;
+        })
+      );
+      
+      // Also update in localStorage
+      const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
+      const updatedLocalUsers = localUsers.map(user => {
+        if (user.id === transaction.userId) {
+          const currentBalance = parseFloat(user.cashBalance || 0);
+          const newBalance = transaction.type === 'deposit' 
+            ? (currentBalance + parseFloat(transaction.amount))
+            : (currentBalance - parseFloat(transaction.amount));
+          
+          return {
+            ...user,
+            cashBalance: newBalance >= 0 ? newBalance : 0
+          };
+        }
+        return user;
+      });
+      localStorage.setItem('users', JSON.stringify(updatedLocalUsers));
+      
+      // Update transactions in localStorage
+      const localPendingTransactions = JSON.parse(localStorage.getItem('pendingTransactions') || '[]');
+      const updatedPending = localPendingTransactions.filter(t => t.id !== transaction.id);
+      localStorage.setItem('pendingTransactions', JSON.stringify(updatedPending));
+      
+      const localTransactions = JSON.parse(localStorage.getItem('transactions') || '[]');
+      const completedTransaction = {
+        ...transaction,
+        status: 'completed',
+        completedDate: new Date().toISOString()
+      };
+      localStorage.setItem('transactions', JSON.stringify([completedTransaction, ...localTransactions]));
+      
+      // Dispatch event to notify other components
+      window.dispatchEvent(new Event('userDataChanged'));
+      
+      alert(`Transaction for ${transaction.userName} has been approved`);
+    } catch (err) {
+      console.error('Error approving transaction:', err);
+      alert(`Failed to approve transaction: ${err.message}`);
+    }
+  };
+
+  const handleRejectTransaction = async (transaction) => {
+    try {
+      // Reject transaction via API
+      await transactionService.rejectTransaction(transaction.id);
+      
+      // Update local state
+      setPendingTransactions(prev => prev.filter(t => t.id !== transaction.id));
+      
+      // Update localStorage
+      const localPendingTransactions = JSON.parse(localStorage.getItem('pendingTransactions') || '[]');
+      const updatedPending = localPendingTransactions.filter(t => t.id !== transaction.id);
+      localStorage.setItem('pendingTransactions', JSON.stringify(updatedPending));
+      
+      const localTransactions = JSON.parse(localStorage.getItem('transactions') || '[]');
+      const rejectedTransaction = {
+        ...transaction,
+        status: 'rejected',
+        completedDate: new Date().toISOString()
+      };
+      localStorage.setItem('transactions', JSON.stringify([rejectedTransaction, ...localTransactions]));
+      
+      // Dispatch event to notify other components
+      window.dispatchEvent(new Event('userDataChanged'));
+      
+      alert(`Transaction for ${transaction.userName} has been rejected`);
+    } catch (err) {
+      console.error('Error rejecting transaction:', err);
+      alert(`Failed to reject transaction: ${err.message}`);
+    }
+  };
+
+  const handleApproveKYC = async (kycRequest) => {
+    try {
+      // Approve KYC via API
+      await kycService.approveKYC(kycRequest.id);
+      
+      // Update local state
+      setPendingKYC(prev => prev.filter(k => k.id !== kycRequest.id));
+      
+      // Update users state
+      setUsers(prevUsers => 
+        prevUsers.map(user => {
+          if (user.id === kycRequest.userId) {
+            return {
+              ...user,
+              kycVerified: true,
+              kycLevel: kycRequest.level,
+              kycApprovedDate: new Date().toISOString()
+            };
+          }
+          return user;
+        })
+      );
+      
+      // Update in localStorage
+      const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
+      const updatedLocalUsers = localUsers.map(user => {
+        if (user.id === kycRequest.userId) {
+          return {
+            ...user,
+            kycVerified: true,
+            kycLevel: kycRequest.level,
+            kycApprovedDate: new Date().toISOString()
+          };
+        }
+        return user;
+      });
+      localStorage.setItem('users', JSON.stringify(updatedLocalUsers));
+      
+      const localPendingKYC = JSON.parse(localStorage.getItem('pendingKYC') || '[]');
+      const updatedPendingKYC = localPendingKYC.filter(k => k.id !== kycRequest.id);
+      localStorage.setItem('pendingKYC', JSON.stringify(updatedPendingKYC));
+      
+      // Dispatch event to notify other components
+      window.dispatchEvent(new Event('userDataChanged'));
+      
+      alert(`KYC for ${kycRequest.userName} has been approved`);
+    } catch (err) {
+      console.error('Error approving KYC:', err);
+      alert(`Failed to approve KYC: ${err.message}`);
+    }
+  };
+
+  const handleRejectKYC = async (kycRequest) => {
+    try {
+      // Reject KYC via API
+      await kycService.rejectKYC(kycRequest.id);
+      
+      // Update local state
+      setPendingKYC(prev => prev.filter(k => k.id !== kycRequest.id));
+      
+      // Update localStorage
+      const localPendingKYC = JSON.parse(localStorage.getItem('pendingKYC') || '[]');
+      const updatedPendingKYC = localPendingKYC.filter(k => k.id !== kycRequest.id);
+      localStorage.setItem('pendingKYC', JSON.stringify(updatedPendingKYC));
+      
+      // Dispatch event to notify other components
+      window.dispatchEvent(new Event('userDataChanged'));
+      
+      alert(`KYC for ${kycRequest.userName} has been rejected`);
+    } catch (err) {
+      console.error('Error rejecting KYC:', err);
+      alert(`Failed to reject KYC: ${err.message}`);
+    }
+  };
+  
+  const handleRefresh = () => {
+    // Load users directly from localStorage
+    setUsers(loadLocalUsers());
     
-    fetchData();
+    // Load pending transactions
+    const localTransactions = JSON.parse(localStorage.getItem('pendingTransactions') || '[]');
+    setPendingTransactions(localTransactions);
+    
+    // Load pending KYC
+    const localKYC = JSON.parse(localStorage.getItem('pendingKYC') || '[]');
+    setPendingKYC(localKYC);
+    
+    console.log("Admin page refreshed with local users");
   };
 
   if (isLoading) {
@@ -376,6 +403,7 @@ const AdminPage = () => {
       </div>
     );
   }
+  // Add this to the end of your AdminPage.jsx file, right after the loading check
 
   return (
     <div className="container mx-auto px-4 py-8">
