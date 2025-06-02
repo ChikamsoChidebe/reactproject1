@@ -83,81 +83,88 @@ const fetchData = async () => {
     fetchData();
   }, [currentUser, navigate]);
 
-  const handleUpdateBalance = async () => {
-    if (!selectedUser || !amount || isNaN(parseFloat(amount))) return;
+  // Update the handleUpdateBalance function in AdminPage.jsx
+const handleUpdateBalance = async () => {
+  if (!selectedUser || !amount || isNaN(parseFloat(amount))) return;
+  
+  const amountValue = parseFloat(amount);
+  
+  try {
+    // Update user via API
+    await userService.updateUser(selectedUser.id, {
+      cashBalance: parseFloat(selectedUser.cashBalance || 0) + amountValue
+    });
     
-    const amountValue = parseFloat(amount);
+    // Also update in localStorage for immediate effect
+    const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
+    const updatedLocalUsers = localUsers.map(user => {
+      if (user.id === selectedUser.id) {
+        const currentBalance = parseFloat(user.cashBalance || 0);
+        const newBalance = currentBalance + amountValue;
+        return {
+          ...user,
+          cashBalance: newBalance >= 0 ? newBalance : 0
+        };
+      }
+      return user;
+    });
+    localStorage.setItem('users', JSON.stringify(updatedLocalUsers));
     
-    try {
-      // Update user via API
-      await userService.updateUser(selectedUser.id, {
-        cashBalance: parseFloat(selectedUser.cashBalance || 0) + amountValue
-      });
-      
-      // Also update in localStorage for immediate effect
-      const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
-      const updatedLocalUsers = localUsers.map(user => {
+    // Update current user if it's the same user
+    const currentLoggedInUser = JSON.parse(localStorage.getItem('user') || '{}');
+    if (currentLoggedInUser.id === selectedUser.id) {
+      currentLoggedInUser.cashBalance = parseFloat(currentLoggedInUser.cashBalance || 0) + amountValue;
+      localStorage.setItem('user', JSON.stringify(currentLoggedInUser));
+    }
+    
+    // Create transaction record
+    const transaction = {
+      id: `transaction-${Date.now()}`,
+      userId: selectedUser.id,
+      userName: selectedUser.name,
+      type: amountValue >= 0 ? 'deposit' : 'withdrawal',
+      amount: Math.abs(amountValue),
+      status: 'completed',
+      date: new Date().toISOString()
+    };
+    
+    // Save transaction to localStorage
+    const transactions = JSON.parse(localStorage.getItem('transactions') || '[]');
+    transactions.unshift(transaction); // Add to beginning
+    localStorage.setItem('transactions', JSON.stringify(transactions));
+    
+    await transactionService.createTransaction(transaction);
+    
+    // Update local state
+    setUsers(prevUsers => 
+      prevUsers.map(user => {
         if (user.id === selectedUser.id) {
-          const currentBalance = parseFloat(user.cashBalance || 0);
-          const newBalance = currentBalance + amountValue;
+          const newBalance = parseFloat(user.cashBalance || 0) + amountValue;
           return {
             ...user,
             cashBalance: newBalance >= 0 ? newBalance : 0
           };
         }
         return user;
-      });
-      localStorage.setItem('users', JSON.stringify(updatedLocalUsers));
-      
-      // Update current user if it's the same user
-      const currentLoggedInUser = JSON.parse(localStorage.getItem('user') || '{}');
-      if (currentLoggedInUser.id === selectedUser.id) {
-        currentLoggedInUser.cashBalance = parseFloat(currentLoggedInUser.cashBalance || 0) + amountValue;
-        localStorage.setItem('user', JSON.stringify(currentLoggedInUser));
-      }
-      
-      // Create transaction record
-      const transaction = {
-        id: `transaction-${Date.now()}`,
-        userId: selectedUser.id,
-        userName: selectedUser.name,
-        type: amountValue >= 0 ? 'deposit' : 'withdrawal',
-        amount: Math.abs(amountValue),
-        status: 'completed',
-        date: new Date().toISOString()
-      };
-      
-      await transactionService.createTransaction(transaction);
-      
-      // Update local state
-      setUsers(prevUsers => 
-        prevUsers.map(user => {
-          if (user.id === selectedUser.id) {
-            const newBalance = parseFloat(user.cashBalance || 0) + amountValue;
-            return {
-              ...user,
-              cashBalance: newBalance >= 0 ? newBalance : 0
-            };
-          }
-          return user;
-        })
-      );
-      
-      setSelectedUser(prev => ({
-        ...prev,
-        cashBalance: parseFloat(prev.cashBalance || 0) + amountValue
-      }));
-      
-      // Dispatch event to notify other components
-      window.dispatchEvent(new Event('userDataChanged'));
-      
-      setAmount('');
-      alert(`Successfully updated ${selectedUser.name}'s balance`);
-    } catch (err) {
-      console.error('Error updating balance:', err);
-      alert(`Failed to update balance: ${err.message}`);
-    }
-  };
+      })
+    );
+    
+    setSelectedUser(prev => ({
+      ...prev,
+      cashBalance: parseFloat(prev.cashBalance || 0) + amountValue
+    }));
+    
+    // Dispatch event to notify other components
+    window.dispatchEvent(new Event('userDataChanged'));
+    
+    setAmount('');
+    alert(`Successfully updated ${selectedUser.name}'s balance`);
+  } catch (err) {
+    console.error('Error updating balance:', err);
+    alert(`Failed to update balance: ${err.message}`);
+  }
+};
+
 
   const handleAddPosition = async () => {
     if (!selectedUser || !positionSymbol || !positionQuantity || !positionPrice) {
