@@ -27,26 +27,33 @@ const DashboardPage = () => {
       setTransactions(userTransactions);
     };
     
+    // Function to refresh all data
+    const refreshData = () => {
+      loadTransactions();
+      setRefreshKey(prevKey => prevKey + 1);
+      console.log("Dashboard data refreshed");
+    };
+    
     loadTransactions();
     
     // Listen for changes in localStorage
-    const handleStorageChange = () => {
-      loadTransactions();
-      setRefreshKey(prevKey => prevKey + 1);
+    const handleStorageChange = (e) => {
+      if (e.key === 'users' || e.key === 'transactions' || e.key?.startsWith('positions_')) {
+        refreshData();
+      }
     };
     
     // Listen for custom event
-    window.addEventListener('userDataChanged', handleStorageChange);
+    const handleUserDataChanged = () => {
+      refreshData();
+    };
     
-    // Poll for changes
-    const intervalId = setInterval(() => {
-      loadTransactions();
-      setRefreshKey(prevKey => prevKey + 1);
-    }, 3000);
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('userDataChanged', handleUserDataChanged);
     
     return () => {
-      window.removeEventListener('userDataChanged', handleStorageChange);
-      clearInterval(intervalId);
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('userDataChanged', handleUserDataChanged);
     };
   }, [currentUser, navigate]);
   
