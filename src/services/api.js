@@ -1,6 +1,10 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:5000/api';
+// Use the deployed backend URL for production
+const isProduction = window.location.hostname !== 'localhost';
+const API_URL = isProduction 
+  ? 'https://credoxbackend.onrender.com/api'  // Deployed backend
+  : 'http://localhost:5000/api';              // Local development
 
 const api = axios.create({
   baseURL: API_URL,
