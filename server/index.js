@@ -44,7 +44,7 @@ initDataFile(USERS_FILE, [
     accountType: 'Admin',
     joinDate: new Date().toISOString().split('T')[0],
     isAdmin: true,
-    cashBalance: 1000000
+    cashBalance: 0
   }
 ]);
 initDataFile(TRANSACTIONS_FILE);
