@@ -142,9 +142,9 @@ const LoginPage = () => {
             </button>
           </div>
           
-          <div className="text-center">
+          {/* <div className="text-center">
             <p className="text-xs text-gray-500">Admin login: admin@credox.com / admin123</p>
-          </div>
+          </div> */}
         </form>
       </div>
     </div>
