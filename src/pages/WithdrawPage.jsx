@@ -25,21 +25,28 @@ const WithdrawPage = () => {
     
     const getRealCashBalance = () => {
       try {
+        // First check localStorage which is more reliable
         const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
+        console.log("All users in localStorage (withdrawal):", localUsers);
+        console.log("Current user ID (withdrawal):", currentUser.id);
+        console.log("Current user email (withdrawal):", currentUser.email);
+        
         // Find user by ID and by email as fallback
         const localUser = localUsers.find(u => u.id === currentUser.id) || 
                          localUsers.find(u => u.email === currentUser.email);
         
         if (localUser) {
-          console.log("Found user in withdrawal page:", localUser);
+          console.log("Found user in localStorage (withdrawal):", localUser);
           const balance = parseFloat(localUser.cashBalance || 0);
-          console.log("User's cash balance in withdrawal page:", balance);
+          console.log("User's cash balance (withdrawal):", balance);
           setRealCashBalance(balance);
-        } else {
-          setRealCashBalance(cashBalance);
+          return;
         }
+        
+        // Fallback to context value
+        setRealCashBalance(cashBalance);
       } catch (err) {
-        console.error('Error getting cash balance in withdrawal page:', err);
+        console.error('Error getting cash balance:', err);
         setRealCashBalance(cashBalance);
       }
     };
