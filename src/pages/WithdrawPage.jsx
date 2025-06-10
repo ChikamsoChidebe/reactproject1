@@ -14,7 +14,7 @@ const WithdrawPage = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [realCashBalance, setRealCashBalance] = useState(0);
-  const [processingStatus, setProcessingStatus] = useState('');
+
 
   // Get real-time cash balance directly from localStorage
   useEffect(() => {
@@ -84,7 +84,6 @@ const WithdrawPage = () => {
     e.preventDefault();
     setError('');
     setSuccess(false);
-    setProcessingStatus('');
     
     if (!amount || parseFloat(amount) <= 0) {
       return setError('Please enter a valid amount');
@@ -99,7 +98,6 @@ const WithdrawPage = () => {
     }
     
     setIsLoading(true);
-    setProcessingStatus('Withdrawal Processing...');
     
     try {
       // Create a pending transaction
@@ -125,12 +123,10 @@ const WithdrawPage = () => {
         setAccountDetails('');
         setSuccess(true);
         setIsLoading(false);
-        setProcessingStatus('Withdrawal Request Submitted');
       }, 2000);
     } catch (err) {
       setError('Failed to process withdrawal request');
       setIsLoading(false);
-      setProcessingStatus('');
     }
   };
 
@@ -167,7 +163,6 @@ const WithdrawPage = () => {
                   placeholder="0.00"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  max={cashBalance}
                   required
                 />
               </div>
@@ -211,7 +206,7 @@ const WithdrawPage = () => {
               disabled={isLoading}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded disabled:opacity-50"
             >
-              {isLoading ? processingStatus || 'Processing...' : 'Submit Withdrawal Request'}
+              {isLoading ? 'Processing...' : 'Submit Withdrawal Request'}
             </button>
           </form>
           
