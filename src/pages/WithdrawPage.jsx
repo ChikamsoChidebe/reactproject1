@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTrading } from '../contexts/TradingContext';
 import { useNavigate } from 'react-router-dom';
@@ -13,23 +13,77 @@ const WithdrawPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [realCashBalance, setRealCashBalance] = useState(cashBalance);
+  const [processingStatus, setProcessingStatus] = useState('');
 
-  // Redirect if not logged in
-  if (!currentUser) {
-    navigate('/login');
-    return null;
-  }
+  // Get real-time cash balance directly from localStorage
+  useEffect(() => {
+    if (!currentUser) {
+      navigate('/login');
+      return;
+    }
+    
+    const getRealCashBalance = () => {
+      try {
+        const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
+        // Find user by ID and by email as fallback
+        const localUser = localUsers.find(u => u.id === currentUser.id) || 
+                         localUsers.find(u => u.email === currentUser.email);
+        
+        if (localUser) {
+          console.log("Found user in withdrawal page:", localUser);
+          const balance = parseFloat(localUser.cashBalance || 0);
+          console.log("User's cash balance in withdrawal page:", balance);
+          setRealCashBalance(balance);
+        } else {
+          setRealCashBalance(cashBalance);
+        }
+      } catch (err) {
+        console.error('Error getting cash balance in withdrawal page:', err);
+        setRealCashBalance(cashBalance);
+      }
+    };
+    
+    getRealCashBalance();
+    
+    // Listen for changes in localStorage
+    const handleStorageChange = (e) => {
+      if (e.key === 'users' || e.key === 'transactions') {
+        getRealCashBalance();
+      }
+    };
+    
+    // Listen for custom event
+    const handleUserDataChanged = () => {
+      getRealCashBalance();
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('userDataChanged', handleUserDataChanged);
+    
+    // Set up polling for real-time updates
+    const intervalId = setInterval(() => {
+      getRealCashBalance();
+    }, 5000); // Check every 5 seconds
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('userDataChanged', handleUserDataChanged);
+      clearInterval(intervalId);
+    };
+  }, [currentUser, navigate, cashBalance]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     setError('');
     setSuccess(false);
+    setProcessingStatus('');
     
     if (!amount || parseFloat(amount) <= 0) {
       return setError('Please enter a valid amount');
     }
     
-    if (parseFloat(amount) > cashBalance) {
+    if (parseFloat(amount) > realCashBalance) {
       return setError('Insufficient funds');
     }
     
@@ -38,6 +92,7 @@ const WithdrawPage = () => {
     }
     
     setIsLoading(true);
+    setProcessingStatus('Withdrawal Processing...');
     
     try {
       // Create a pending transaction
@@ -57,13 +112,18 @@ const WithdrawPage = () => {
       const pendingTransactions = JSON.parse(localStorage.getItem('pendingTransactions') || '[]');
       localStorage.setItem('pendingTransactions', JSON.stringify([transaction, ...pendingTransactions]));
       
-      setAmount('');
-      setAccountDetails('');
-      setSuccess(true);
-      setIsLoading(false);
+      // Simulate processing delay
+      setTimeout(() => {
+        setAmount('');
+        setAccountDetails('');
+        setSuccess(true);
+        setIsLoading(false);
+        setProcessingStatus('Withdrawal Request Submitted');
+      }, 2000);
     } catch (err) {
       setError('Failed to process withdrawal request');
       setIsLoading(false);
+      setProcessingStatus('');
     }
   };
 
@@ -86,7 +146,7 @@ const WithdrawPage = () => {
         
         <div className="bg-white rounded-lg shadow p-6">
           <div className="mb-4 p-4 bg-blue-50 rounded">
-            <p className="font-medium">Available Balance: ${cashBalance.toFixed(2)}</p>
+            <p className="font-medium">Available Balance: ${realCashBalance.toFixed(2)}</p>
           </div>
           
           <form onSubmit={handleSubmit}>
@@ -144,7 +204,7 @@ const WithdrawPage = () => {
               disabled={isLoading}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded disabled:opacity-50"
             >
-              {isLoading ? 'Processing...' : 'Submit Withdrawal Request'}
+              {isLoading ? processingStatus || 'Processing...' : 'Submit Withdrawal Request'}
             </button>
           </form>
           
