@@ -13,7 +13,17 @@ const WithdrawPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-  const [realCashBalance, setRealCashBalance] = useState(cashBalance);
+  const [realCashBalance, setRealCashBalance] = useState(() => {
+    try {
+      const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
+      const localUser = localUsers.find(u => u.id === currentUser?.id) || 
+                       localUsers.find(u => u.email === currentUser?.email);
+      if (localUser && localUser.cashBalance) {
+        return parseFloat(localUser.cashBalance);
+      }
+    } catch (err) {}
+    return cashBalance;
+  });
   const [processingStatus, setProcessingStatus] = useState('');
 
   // Get real-time cash balance directly from localStorage
@@ -23,7 +33,7 @@ const WithdrawPage = () => {
       return;
     }
     
-    const getRealCashBalance = () => {
+    const getRealCashBalance = async () => {
       try {
         // First check localStorage which is more reliable
         const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
@@ -41,6 +51,29 @@ const WithdrawPage = () => {
           console.log("User's cash balance (withdrawal):", balance);
           setRealCashBalance(balance);
           return;
+        }
+        
+        // Try to get from backend API
+        try {
+          const response = await fetch('https://credoxbackend.onrender.com/api/users');
+          if (response.ok) {
+            const apiUsers = await response.json();
+            console.log("API users (withdrawal):", apiUsers);
+            
+            // Find user by ID and by email as fallback
+            const apiUser = apiUsers.find(u => u.id === currentUser.id) ||
+                           apiUsers.find(u => u.email === currentUser.email);
+            
+            if (apiUser) {
+              console.log("Found user in API (withdrawal):", apiUser);
+              const balance = parseFloat(apiUser.cashBalance || 0);
+              console.log("User's cash balance from API (withdrawal):", balance);
+              setRealCashBalance(balance);
+              return;
+            }
+          }
+        } catch (apiErr) {
+          console.error("Error fetching from API (withdrawal):", apiErr);
         }
         
         // Fallback to context value
