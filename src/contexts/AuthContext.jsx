@@ -10,19 +10,46 @@ export const AuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Check if user is already logged in (from localStorage)
+  // Check if user is already logged in (from backend or localStorage)
   useEffect(() => {
     const checkAuth = async () => {
       try {
+        // First check localStorage for token
+        const authToken = localStorage.getItem('authToken');
         const savedUser = localStorage.getItem('user');
         
-        if (savedUser) {
-          const parsedUser = JSON.parse(savedUser);
-          setCurrentUser(parsedUser);
-          setIsAuthenticated(true);
+        if (authToken && savedUser) {
+          // Verify with backend
+          try {
+            const response = await fetch('https://credoxbackend.onrender.com/api/auth/verify', {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            if (response.ok) {
+              // Token is valid
+              const parsedUser = JSON.parse(savedUser);
+              setCurrentUser(parsedUser);
+              setIsAuthenticated(true);
+            } else {
+              // Token is invalid, clear localStorage
+              localStorage.removeItem('authToken');
+              localStorage.removeItem('user');
+            }
+          } catch (apiErr) {
+            console.error('API verification failed:', apiErr);
+            // If API call fails, still use localStorage as fallback
+            const parsedUser = JSON.parse(savedUser);
+            setCurrentUser(parsedUser);
+            setIsAuthenticated(true);
+          }
         }
       } catch (err) {
         console.error('Authentication check failed:', err);
+        localStorage.removeItem('authToken');
         localStorage.removeItem('user');
       } finally {
         setIsLoading(false);
@@ -38,7 +65,35 @@ export const AuthProvider = ({ children }) => {
     setError(null);
     
     try {
-      // Check if user exists in localStorage
+      // Try to login with backend API
+      try {
+        const response = await fetch('https://credoxbackend.onrender.com/api/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ email, password })
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          
+          // Set current user
+          setCurrentUser(data.user);
+          setIsAuthenticated(true);
+          
+          // Save to localStorage
+          localStorage.setItem('authToken', data.token);
+          localStorage.setItem('user', JSON.stringify(data.user));
+          
+          setIsLoading(false);
+          return data.user;
+        }
+      } catch (apiErr) {
+        console.error('API login failed, falling back to local:', apiErr);
+      }
+      
+      // Fallback to localStorage if API fails
       const users = JSON.parse(localStorage.getItem('users') || '[]');
       
       // Find user by email (case insensitive)
@@ -130,10 +185,28 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Logout function
-  const logout = () => {
-    setCurrentUser(null);
-    setIsAuthenticated(false);
-    localStorage.removeItem('user');
+  const logout = async () => {
+    try {
+      // Try to logout with backend API
+      const authToken = localStorage.getItem('authToken');
+      if (authToken) {
+        await fetch('https://credoxbackend.onrender.com/api/auth/logout', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+      }
+    } catch (err) {
+      console.error('Logout API call failed:', err);
+    } finally {
+      // Always clear local state regardless of API success
+      setCurrentUser(null);
+      setIsAuthenticated(false);
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('user');
+    }
   };
 
   // Context value
