@@ -61,7 +61,8 @@ const getRealCashBalance = async () => {
   
   // Redirect if not logged in
   useEffect(() => {
-    if (!currentUser) {
+    const savedUser = localStorage.getItem('user');
+    if (!currentUser && !savedUser) {
       navigate('/login');
       return;
     }

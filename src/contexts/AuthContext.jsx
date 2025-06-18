@@ -10,52 +10,28 @@ export const AuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Check if user is already logged in (from backend or localStorage)
+  // Check if user is already logged in (from localStorage)
   useEffect(() => {
-    const checkAuth = async () => {
+    const checkAuth = () => {
       try {
-        // First check localStorage for token
-        const authToken = localStorage.getItem('authToken');
         const savedUser = localStorage.getItem('user');
         
-        if (authToken && savedUser) {
-          // Verify with backend
-          try {
-            const response = await fetch('https://credoxbackend.onrender.com/api/auth/verify', {
-              method: 'GET',
-              headers: {
-                'Authorization': `Bearer ${authToken}`,
-                'Content-Type': 'application/json'
-              }
-            });
-            
-            if (response.ok) {
-              // Token is valid
-              const parsedUser = JSON.parse(savedUser);
-              setCurrentUser(parsedUser);
-              setIsAuthenticated(true);
-            } else {
-              // Token is invalid, clear localStorage
-              localStorage.removeItem('authToken');
-              localStorage.removeItem('user');
-            }
-          } catch (apiErr) {
-            console.error('API verification failed:', apiErr);
-            // If API call fails, still use localStorage as fallback
-            const parsedUser = JSON.parse(savedUser);
-            setCurrentUser(parsedUser);
-            setIsAuthenticated(true);
-          }
+        if (savedUser) {
+          // Just use the saved user without verification
+          const parsedUser = JSON.parse(savedUser);
+          setCurrentUser(parsedUser);
+          setIsAuthenticated(true);
+          console.log("User authenticated from localStorage:", parsedUser);
         }
       } catch (err) {
         console.error('Authentication check failed:', err);
-        localStorage.removeItem('authToken');
         localStorage.removeItem('user');
       } finally {
         setIsLoading(false);
       }
     };
     
+    // Run immediately without async
     checkAuth();
   }, []);
 
