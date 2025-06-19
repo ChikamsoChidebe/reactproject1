@@ -77,11 +77,10 @@ export const AuthProvider = ({ children }) => {
         setCurrentUser(adminUser);
         setIsAuthenticated(true);
         
-        // Save to localStorage if not already saved
-        if (!localStorage.getItem('user')) {
-          localStorage.setItem('user', JSON.stringify(adminUser));
-        }
+        // Always save to localStorage to ensure it's up to date
+        localStorage.setItem('user', JSON.stringify(adminUser));
         
+        console.log("Admin login successful");
         setIsLoading(false);
         return adminUser;
       }

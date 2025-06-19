@@ -28,26 +28,63 @@ import Layout from './components/layout/Layout';
 
 // Protected Route component
 const ProtectedRoute = ({ children }) => {
-  const isAuthenticated = localStorage.getItem('user') !== null;
-  
-  if (!isAuthenticated) {
+  try {
+    const userStr = localStorage.getItem('user');
+    
+    // Check if user data exists and is valid
+    if (!userStr || userStr === 'undefined') {
+      console.log('No user data found, redirecting to login');
+      return <Navigate to="/login" replace />;
+    }
+    
+    // Try to parse the user data
+    try {
+      JSON.parse(userStr);
+    } catch (e) {
+      console.error('Invalid user data in localStorage:', e);
+      localStorage.removeItem('user');
+      return <Navigate to="/login" replace />;
+    }
+    
+    return children;
+  } catch (error) {
+    console.error('Error in ProtectedRoute:', error);
     return <Navigate to="/login" replace />;
   }
-  
-  return children;
 };
 
 // Admin Route component
 const AdminRoute = ({ children }) => {
-  const userStr = localStorage.getItem('user');
-  const user = userStr ? JSON.parse(userStr) : {};
-  const isAdmin = user.email === 'admin@credox.com';
-  
-  if (!isAdmin) {
-    return <Navigate to="/dashboard" replace />;
+  try {
+    const userStr = localStorage.getItem('user');
+    
+    // Check if user data exists
+    if (!userStr || userStr === 'undefined') {
+      console.log('No user data found, redirecting to login');
+      return <Navigate to="/login" replace />;
+    }
+    
+    // Try to parse the user data
+    let user;
+    try {
+      user = JSON.parse(userStr);
+    } catch (e) {
+      console.error('Invalid user data in localStorage:', e);
+      localStorage.removeItem('user');
+      return <Navigate to="/login" replace />;
+    }
+    
+    // Check if user is admin
+    if (!user || user.email !== 'admin@credox.com') {
+      console.log('User is not admin, redirecting to dashboard');
+      return <Navigate to="/dashboard" replace />;
+    }
+    
+    return children;
+  } catch (error) {
+    console.error('Error in AdminRoute:', error);
+    return <Navigate to="/login" replace />;
   }
-  
-  return children;
 };
 
 function App() {

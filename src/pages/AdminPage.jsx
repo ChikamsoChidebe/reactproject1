@@ -22,13 +22,12 @@ const AdminPage = () => {
         cashBalance: 0
       };
       
-      // Set admin user directly in context
-      setCurrentUser(adminUser);
-      setIsAuthenticated(true);
-      
-      // Update localStorage
+      // Update localStorage first
       localStorage.setItem('user', JSON.stringify(adminUser));
-      console.log("Admin user initialized directly");
+      
+      // Navigate to login page to re-authenticate
+      navigate('/login');
+      console.log("Redirecting to login for admin authentication");
     }
   }, []);
   const [users, setUsers] = useState([]);
