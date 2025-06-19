@@ -39,7 +39,8 @@ const ProtectedRoute = ({ children }) => {
 
 // Admin Route component
 const AdminRoute = ({ children }) => {
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const userStr = localStorage.getItem('user');
+  const user = userStr ? JSON.parse(userStr) : {};
   const isAdmin = user.email === 'admin@credox.com';
   
   if (!isAdmin) {
