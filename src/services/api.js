@@ -1,7 +1,8 @@
 import axios from 'axios';
 
-// Always use the deployed backend URL
-const API_URL = 'https://credoxbackend.onrender.com/api';
+// Use relative URL for development (will be handled by Vite proxy)
+// and absolute URL for production
+const API_URL = import.meta.env.DEV ? '/api' : 'https://credoxbackend.onrender.com/api';
 
 console.log("Using API URL:", API_URL);
 
@@ -9,19 +10,30 @@ const api = axios.create({
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json'
-  }
+  },
+  withCredentials: true // This helps with cookies/authentication across domains
 });
 
 // Auth services
 export const authService = {
   login: async (email, password) => {
-    const response = await api.post('/auth/login', { email, password });
-    return response.data;
+    try {
+      const response = await api.post('/auth/login', { email, password });
+      return response.data;
+    } catch (error) {
+      console.error('API login error:', error);
+      throw new Error(error.response?.data?.message || 'Login failed');
+    }
   },
   
   register: async (userData) => {
-    const response = await api.post('/auth/register', userData);
-    return response.data;
+    try {
+      const response = await api.post('/auth/register', userData);
+      return response.data;
+    } catch (error) {
+      console.error('API register error:', error);
+      throw new Error(error.response?.data?.message || 'Registration failed');
+    }
   }
 };
 

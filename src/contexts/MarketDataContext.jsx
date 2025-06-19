@@ -122,27 +122,39 @@ export const MarketDataProvider = ({ children }) => {
   useEffect(() => {
     const interval = setInterval(() => {
       setMarketData(prevData => {
-        // Create a deep copy of the previous data
-        const newData = JSON.parse(JSON.stringify(prevData));
+        // Check if prevData is valid before parsing
+        if (!prevData) return sampleMarketData;
         
-        // Update each asset category with small random changes
-        Object.keys(newData).forEach(category => {
-          newData[category] = newData[category].map(asset => {
-            const randomChange = (Math.random() - 0.5) * 0.5; // Random change between -0.25% and 0.25%
-            const newPrice = asset.price * (1 + randomChange / 100);
-            const newChangePercent = asset.changePercent + randomChange;
-            const newChange = asset.price * (newChangePercent / 100);
-            
-            return {
-              ...asset,
-              price: newPrice,
-              change: newChange,
-              changePercent: newChangePercent
-            };
+        try {
+          // Create a deep copy of the previous data
+          const newData = JSON.parse(JSON.stringify(prevData));
+          
+          // Update each asset category with small random changes
+          Object.keys(newData).forEach(category => {
+            if (Array.isArray(newData[category])) {
+              newData[category] = newData[category].map(asset => {
+                if (!asset) return null;
+                
+                const randomChange = (Math.random() - 0.5) * 0.5; // Random change between -0.25% and 0.25%
+                const newPrice = asset.price * (1 + randomChange / 100);
+                const newChangePercent = asset.changePercent + randomChange;
+                const newChange = asset.price * (newChangePercent / 100);
+                
+                return {
+                  ...asset,
+                  price: newPrice,
+                  change: newChange,
+                  changePercent: newChangePercent
+                };
+              }).filter(Boolean); // Remove any null values
+            }
           });
-        });
-        
-        return newData;
+          
+          return newData;
+        } catch (error) {
+          console.error("Error updating market data:", error);
+          return prevData; // Return the previous data if there's an error
+        }
       });
     }, 5000); // Update every 5 seconds
     

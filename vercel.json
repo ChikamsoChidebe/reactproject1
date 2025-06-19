@@ -1,5 +1,1 @@
-{
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
-}
+{\n  \"rewrites\": [\n    { \"source\": \"/api/(.*)\", \"destination\": \"https://credoxbackend.onrender.com/api/$1\" },\n    { \"source\": \"/(.*)\", \"destination\": \"/index.html\" }\n  ],\n  \"headers\": [\n    {\n      \"source\": \"/api/(.*)\",\n      \"headers\": [\n        { \"key\": \"Access-Control-Allow-Credentials\", \"value\": \"true\" },\n        { \"key\": \"Access-Control-Allow-Origin\", \"value\": \"https://www.creditsxonline.com\" },\n        { \"key\": \"Access-Control-Allow-Methods\", \"value\": \"GET,OPTIONS,PATCH,DELETE,POST,PUT\" },\n        { \"key\": \"Access-Control-Allow-Headers\", \"value\": \"X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization\" }\n      ]\n    }\n  ]\n}

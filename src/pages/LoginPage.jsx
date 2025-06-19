@@ -27,32 +27,14 @@ const LoginPage = () => {
     try {
       console.log("Attempting login with API:", email);
       
-      // Try to login with API first
-      try {
-        const user = await authService.login(email, password);
-        console.log("User logged in with API:", user);
-        
-        // Login with local auth context
-        await login(email, password);
-        
-        // Redirect based on user role
-        if (email === 'admin@credox.com') {
-          navigate('/admin');
-        } else {
-          navigate('/dashboard');
-        }
-      } catch (apiError) {
-        console.error("API login failed, falling back to local:", apiError);
-        
-        // Fallback to local login
-        await login(email, password);
-        
-        // Redirect based on user role
-        if (email === 'admin@credox.com') {
-          navigate('/admin');
-        } else {
-          navigate('/dashboard');
-        }
+      // Skip API and use local auth context directly
+      await login(email, password);
+      
+      // Redirect based on user role
+      if (email === 'admin@credox.com') {
+        navigate('/admin');
+      } else {
+        navigate('/dashboard');
       }
     } catch (err) {
       console.error('Login error:', err);
