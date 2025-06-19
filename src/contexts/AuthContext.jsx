@@ -16,12 +16,18 @@ export const AuthProvider = ({ children }) => {
       try {
         const savedUser = localStorage.getItem('user');
         
-        if (savedUser) {
+        if (savedUser && savedUser !== 'undefined') {
           // Just use the saved user without verification
           const parsedUser = JSON.parse(savedUser);
-          setCurrentUser(parsedUser);
-          setIsAuthenticated(true);
-          console.log("User authenticated from localStorage:", parsedUser);
+          if (parsedUser && typeof parsedUser === 'object') {
+            setCurrentUser(parsedUser);
+            setIsAuthenticated(true);
+            console.log("User authenticated from localStorage:", parsedUser);
+          } else {
+            // Invalid user object
+            console.error('Invalid user object in localStorage');
+            localStorage.removeItem('user');
+          }
         }
       } catch (err) {
         console.error('Authentication check failed:', err);
@@ -54,16 +60,16 @@ export const AuthProvider = ({ children }) => {
         if (response.ok) {
           const data = await response.json();
           
-          // Set current user
-          setCurrentUser(data.user);
+          // Set current user - backend returns user directly, not nested in data.user
+          setCurrentUser(data);
           setIsAuthenticated(true);
           
-          // Save to localStorage
-          localStorage.setItem('authToken', data.token);
-          localStorage.setItem('user', JSON.stringify(data.user));
+          // Save to localStorage - store the entire user object
+          localStorage.setItem('authToken', data.id); // Use ID as token if no token provided
+          localStorage.setItem('user', JSON.stringify(data));
           
           setIsLoading(false);
-          return data.user;
+          return data;
         }
       } catch (apiErr) {
         console.error('API login failed, falling back to local:', apiErr);

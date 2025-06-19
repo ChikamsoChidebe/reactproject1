@@ -36,14 +36,25 @@ const AdminPage = () => {
 const fetchData = async () => {
   setIsLoading(true);
   
-  // Always load local users first as a fallback
-  const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
-  const filteredLocalUsers = localUsers.filter(user => user.email !== 'admin@credox.com');
-  
-  // Set users from localStorage immediately
-  setUsers(filteredLocalUsers);
-  
   try {
+    // Always load local users first as a fallback
+    let localUsers = [];
+    try {
+      const usersData = localStorage.getItem('users');
+      if (usersData && usersData !== 'undefined') {
+        localUsers = JSON.parse(usersData);
+      }
+    } catch (parseErr) {
+      console.error("Error parsing users from localStorage:", parseErr);
+      localStorage.removeItem('users'); // Remove invalid data
+      localUsers = [];
+    }
+    
+    const filteredLocalUsers = localUsers.filter(user => user.email !== 'admin@credox.com');
+    
+    // Set users from localStorage immediately
+    setUsers(filteredLocalUsers);
+    
     // Then try to fetch from API
     console.log("Fetching users from API:", 'https://credoxbackend.onrender.com/api/users');
     const response = await fetch('https://credoxbackend.onrender.com/api/users', {
@@ -65,18 +76,37 @@ const fetchData = async () => {
     } else {
       console.error("API response not OK:", response.status);
     }
+  
+    // Load other data
+    let localTransactions = [];
+    try {
+      const transactionsData = localStorage.getItem('pendingTransactions');
+      if (transactionsData && transactionsData !== 'undefined') {
+        localTransactions = JSON.parse(transactionsData);
+      }
+    } catch (parseErr) {
+      console.error("Error parsing transactions from localStorage:", parseErr);
+      localStorage.removeItem('pendingTransactions');
+    }
+    setPendingTransactions(localTransactions);
+    
+    let localKYC = [];
+    try {
+      const kycData = localStorage.getItem('pendingKYC');
+      if (kycData && kycData !== 'undefined') {
+        localKYC = JSON.parse(kycData);
+      }
+    } catch (parseErr) {
+      console.error("Error parsing KYC from localStorage:", parseErr);
+      localStorage.removeItem('pendingKYC');
+    }
+    setPendingKYC(localKYC);
   } catch (err) {
-    console.error("Error fetching users:", err);
+    console.error("Error in fetchData:", err);
+    setError("Failed to load data. Please try again.");
   } finally {
     setIsLoading(false);
   }
-  
-  // Load other data
-  const localTransactions = JSON.parse(localStorage.getItem('pendingTransactions') || '[]');
-  setPendingTransactions(localTransactions);
-  
-  const localKYC = JSON.parse(localStorage.getItem('pendingKYC') || '[]');
-  setPendingKYC(localKYC);
 };
 
     
@@ -424,15 +454,26 @@ const handleUpdateBalance = async () => {
   
   const handleRefresh = async () => {
     setIsLoading(true);
-    
-    // Always load local users first as a fallback
-    const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
-    const filteredLocalUsers = localUsers.filter(user => user.email !== 'admin@credox.com');
-    
-    // Set users from localStorage immediately
-    setUsers(filteredLocalUsers);
+    setError(null);
     
     try {
+      // Always load local users first as a fallback
+      let localUsers = [];
+      try {
+        const usersData = localStorage.getItem('users');
+        if (usersData && usersData !== 'undefined') {
+          localUsers = JSON.parse(usersData);
+        }
+      } catch (parseErr) {
+        console.error("Error parsing users from localStorage:", parseErr);
+        localStorage.removeItem('users'); // Remove invalid data
+      }
+      
+      const filteredLocalUsers = localUsers.filter(user => user.email !== 'admin@credox.com');
+      
+      // Set users from localStorage immediately
+      setUsers(filteredLocalUsers);
+      
       // Then try to fetch from API directly
       console.log("Fetching users from API (refresh):", 'https://credoxbackend.onrender.com/api/users');
       const response = await fetch('https://credoxbackend.onrender.com/api/users', {
@@ -454,20 +495,39 @@ const handleUpdateBalance = async () => {
       } else {
         console.error("API response not OK (refresh):", response.status);
       }
+      
+      // Load other data
+      let localTransactions = [];
+      try {
+        const transactionsData = localStorage.getItem('pendingTransactions');
+        if (transactionsData && transactionsData !== 'undefined') {
+          localTransactions = JSON.parse(transactionsData);
+        }
+      } catch (parseErr) {
+        console.error("Error parsing transactions from localStorage:", parseErr);
+        localStorage.removeItem('pendingTransactions');
+      }
+      setPendingTransactions(localTransactions);
+      
+      let localKYC = [];
+      try {
+        const kycData = localStorage.getItem('pendingKYC');
+        if (kycData && kycData !== 'undefined') {
+          localKYC = JSON.parse(kycData);
+        }
+      } catch (parseErr) {
+        console.error("Error parsing KYC from localStorage:", parseErr);
+        localStorage.removeItem('pendingKYC');
+      }
+      setPendingKYC(localKYC);
+      
+      console.log("Admin page refreshed");
     } catch (err) {
-      console.error("Error refreshing users:", err);
+      console.error("Error refreshing data:", err);
+      setError("Failed to refresh data. Please try again.");
     } finally {
       setIsLoading(false);
     }
-    
-    // Load other data
-    const localTransactions = JSON.parse(localStorage.getItem('pendingTransactions') || '[]');
-    setPendingTransactions(localTransactions);
-    
-    const localKYC = JSON.parse(localStorage.getItem('pendingKYC') || '[]');
-    setPendingKYC(localKYC);
-    
-    console.log("Admin page refreshed");
   };
 
   if (isLoading) {

@@ -8,7 +8,7 @@ const LoginPage = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, setCurrentUser, setIsAuthenticated } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -27,15 +27,31 @@ const LoginPage = () => {
     try {
       console.log("Attempting login with API:", email);
       
-      // Skip API and use local auth context directly
-      await login(email, password);
-      
-      // Redirect based on user role
-      if (email === 'admin@credox.com') {
+      // Special handling for admin login
+      if (email === 'admin@credox.com' && password === 'admin123') {
+        // Create admin user object
+        const adminUser = {
+          id: 'admin-user',
+          name: 'Admin',
+          email: 'admin@credox.com',
+          accountId: 'CR-ADMIN',
+          accountType: 'Admin',
+          isAdmin: true,
+          cashBalance: 0
+        };
+        
+        // Store in localStorage
+        localStorage.setItem('user', JSON.stringify(adminUser));
+        
+        // Set in auth context
+        setIsLoading(false);
         navigate('/admin');
-      } else {
-        navigate('/dashboard');
+        return;
       }
+      
+      // For non-admin users, use the regular login flow
+      await login(email, password);
+      navigate('/dashboard');
     } catch (err) {
       console.error('Login error:', err);
       setError(err.message || 'Invalid email or password');
