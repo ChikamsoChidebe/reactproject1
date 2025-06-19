@@ -14,18 +14,31 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const checkAuth = () => {
       try {
-        const savedUser = localStorage.getItem('user');
+        // Clear any invalid data first
+        const savedUserRaw = localStorage.getItem('user');
         
-        if (savedUser && savedUser !== 'undefined') {
-          // Just use the saved user without verification
-          const parsedUser = JSON.parse(savedUser);
-          if (parsedUser && typeof parsedUser === 'object') {
-            setCurrentUser(parsedUser);
-            setIsAuthenticated(true);
-            console.log("User authenticated from localStorage:", parsedUser);
-          } else {
-            // Invalid user object
-            console.error('Invalid user object in localStorage');
+        // Only try to parse if we have a non-empty string
+        if (savedUserRaw && typeof savedUserRaw === 'string' && savedUserRaw !== 'undefined' && savedUserRaw.trim() !== '') {
+          try {
+            const parsedUser = JSON.parse(savedUserRaw);
+            
+            // Validate that we have a proper user object
+            if (parsedUser && typeof parsedUser === 'object' && parsedUser.email) {
+              setCurrentUser(parsedUser);
+              setIsAuthenticated(true);
+              console.log("User authenticated from localStorage:", parsedUser);
+            } else {
+              console.error('Invalid user object structure in localStorage');
+              localStorage.removeItem('user');
+            }
+          } catch (parseError) {
+            console.error('Failed to parse user from localStorage:', parseError);
+            localStorage.removeItem('user');
+          }
+        } else {
+          // No valid user data
+          if (savedUserRaw) {
+            console.log('Removing invalid user data from localStorage');
             localStorage.removeItem('user');
           }
         }

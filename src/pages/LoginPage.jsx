@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/api';
@@ -10,6 +10,24 @@ const LoginPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const { login, setCurrentUser, setIsAuthenticated } = useAuth();
   const navigate = useNavigate();
+  
+  // Clear any corrupted localStorage data on component mount
+  useEffect(() => {
+    try {
+      // Check if user data is valid JSON
+      const userData = localStorage.getItem('user');
+      if (userData) {
+        try {
+          JSON.parse(userData);
+        } catch (e) {
+          console.log("Clearing corrupted user data from localStorage");
+          localStorage.removeItem('user');
+        }
+      }
+    } catch (e) {
+      console.error("Error checking localStorage:", e);
+    }
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -40,10 +58,14 @@ const LoginPage = () => {
           cashBalance: 0
         };
         
+        // Set in auth context directly
+        setCurrentUser(adminUser);
+        setIsAuthenticated(true);
+        
         // Store in localStorage
         localStorage.setItem('user', JSON.stringify(adminUser));
         
-        // Set in auth context
+        console.log("Admin login successful, redirecting to admin page");
         setIsLoading(false);
         navigate('/admin');
         return;

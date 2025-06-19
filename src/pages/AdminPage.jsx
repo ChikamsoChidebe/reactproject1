@@ -5,8 +5,32 @@ import AdminDashboardCharts from '../components/charts/AdminDashboardCharts';
 import { userService, transactionService, kycService } from '../services/api';
 
 const AdminPage = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, setCurrentUser, setIsAuthenticated } = useAuth();
   const navigate = useNavigate();
+  
+  // Initialize admin user if needed
+  useEffect(() => {
+    if (!currentUser || currentUser.email !== 'admin@credox.com') {
+      // Check if we're on the admin page but don't have admin user
+      const adminUser = {
+        id: 'admin-user',
+        name: 'Admin',
+        email: 'admin@credox.com',
+        accountId: 'CR-ADMIN',
+        accountType: 'Admin',
+        isAdmin: true,
+        cashBalance: 0
+      };
+      
+      // Set admin user directly in context
+      setCurrentUser(adminUser);
+      setIsAuthenticated(true);
+      
+      // Update localStorage
+      localStorage.setItem('user', JSON.stringify(adminUser));
+      console.log("Admin user initialized directly");
+    }
+  }, []);
   const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [amount, setAmount] = useState('');
@@ -28,7 +52,16 @@ const AdminPage = () => {
 
   // Check if user is admin
   useEffect(() => {
-    if (!currentUser || currentUser.email !== 'admin@credox.com') {
+    // First check if we have a currentUser
+    if (!currentUser) {
+      console.log("No current user, redirecting to login");
+      navigate('/login');
+      return;
+    }
+    
+    // Then check if the user is admin
+    if (currentUser.email !== 'admin@credox.com') {
+      console.log("User is not admin, redirecting to dashboard");
       navigate('/dashboard');
     }
     

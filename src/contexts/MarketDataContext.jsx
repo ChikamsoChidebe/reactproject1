@@ -122,31 +122,41 @@ export const MarketDataProvider = ({ children }) => {
   useEffect(() => {
     const interval = setInterval(() => {
       setMarketData(prevData => {
-        // Check if prevData is valid before parsing
-        if (!prevData) return sampleMarketData;
+        // Check if prevData is valid
+        if (!prevData || typeof prevData !== 'object') {
+          console.error("Invalid market data, resetting to sample data");
+          return sampleMarketData;
+        }
         
         try {
-          // Create a deep copy of the previous data
-          const newData = JSON.parse(JSON.stringify(prevData));
+          // Create a deep copy without using JSON.parse/stringify which can cause errors
+          const newData = {};
           
-          // Update each asset category with small random changes
-          Object.keys(newData).forEach(category => {
-            if (Array.isArray(newData[category])) {
-              newData[category] = newData[category].map(asset => {
+          // Copy each category
+          Object.keys(prevData).forEach(category => {
+            if (Array.isArray(prevData[category])) {
+              newData[category] = prevData[category].map(asset => {
                 if (!asset) return null;
                 
-                const randomChange = (Math.random() - 0.5) * 0.5; // Random change between -0.25% and 0.25%
-                const newPrice = asset.price * (1 + randomChange / 100);
-                const newChangePercent = asset.changePercent + randomChange;
-                const newChange = asset.price * (newChangePercent / 100);
-                
-                return {
-                  ...asset,
-                  price: newPrice,
-                  change: newChange,
-                  changePercent: newChangePercent
-                };
+                try {
+                  const randomChange = (Math.random() - 0.5) * 0.5; // Random change between -0.25% and 0.25%
+                  const newPrice = asset.price * (1 + randomChange / 100);
+                  const newChangePercent = asset.changePercent + randomChange;
+                  const newChange = asset.price * (newChangePercent / 100);
+                  
+                  return {
+                    ...asset,
+                    price: newPrice,
+                    change: newChange,
+                    changePercent: newChangePercent
+                  };
+                } catch (assetError) {
+                  console.error("Error updating asset:", assetError);
+                  return asset; // Return the original asset if there's an error
+                }
               }).filter(Boolean); // Remove any null values
+            } else {
+              newData[category] = prevData[category];
             }
           });
           
