@@ -60,6 +60,32 @@ export const AuthProvider = ({ children }) => {
     setError(null);
     
     try {
+      // Special handling for admin login
+      if (email === 'admin@credox.com' && password === 'admin123') {
+        // Create admin user object
+        const adminUser = {
+          id: 'admin-user',
+          name: 'Admin',
+          email: 'admin@credox.com',
+          accountId: 'CR-ADMIN',
+          accountType: 'Admin',
+          isAdmin: true,
+          cashBalance: 0
+        };
+        
+        // Set current user
+        setCurrentUser(adminUser);
+        setIsAuthenticated(true);
+        
+        // Save to localStorage if not already saved
+        if (!localStorage.getItem('user')) {
+          localStorage.setItem('user', JSON.stringify(adminUser));
+        }
+        
+        setIsLoading(false);
+        return adminUser;
+      }
+      
       // Try to login with backend API
       try {
         const response = await fetch('https://credoxbackend.onrender.com/api/auth/login', {
@@ -212,7 +238,9 @@ export const AuthProvider = ({ children }) => {
     error,
     login,
     register,
-    logout
+    logout,
+    setCurrentUser,
+    setIsAuthenticated
   };
 
   return (

@@ -45,26 +45,9 @@ const LoginPage = () => {
     try {
       console.log("Attempting login with API:", email);
       
-      // Special handling for admin login
+      // Admin login is now handled in the login function
       if (email === 'admin@credox.com' && password === 'admin123') {
-        // Create admin user object
-        const adminUser = {
-          id: 'admin-user',
-          name: 'Admin',
-          email: 'admin@credox.com',
-          accountId: 'CR-ADMIN',
-          accountType: 'Admin',
-          isAdmin: true,
-          cashBalance: 0
-        };
-        
-        // Set in auth context directly
-        setCurrentUser(adminUser);
-        setIsAuthenticated(true);
-        
-        // Store in localStorage
-        localStorage.setItem('user', JSON.stringify(adminUser));
-        
+        await login(email, password);
         console.log("Admin login successful, redirecting to admin page");
         setIsLoading(false);
         navigate('/admin');

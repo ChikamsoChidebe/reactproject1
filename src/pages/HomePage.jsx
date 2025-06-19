@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useMarketData } from '../contexts/MarketDataContext';
@@ -6,6 +6,37 @@ import { useMarketData } from '../contexts/MarketDataContext';
 const HomePage = () => {
   const { currentUser, isAuthenticated } = useAuth();
   const { marketData } = useMarketData();
+  
+  // Fix dark mode on mobile devices
+  useEffect(() => {
+    const fixDarkModeOnMobile = () => {
+      const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const htmlElement = document.documentElement;
+      
+      if (isDarkMode) {
+        htmlElement.classList.add('dark');
+      }
+      
+      // Force dark mode styles to apply on mobile
+      if (window.innerWidth <= 768) {
+        const darkElements = document.querySelectorAll('.dark\\:bg-gray-800, .dark\\:bg-gray-900, .dark\\:text-gray-400');
+        darkElements.forEach(el => {
+          if (isDarkMode) {
+            if (el.classList.contains('dark:bg-gray-800')) el.classList.add('bg-gray-800');
+            if (el.classList.contains('dark:bg-gray-900')) el.classList.add('bg-gray-900');
+            if (el.classList.contains('dark:text-gray-400')) el.classList.add('text-gray-400');
+          }
+        });
+      }
+    };
+    
+    fixDarkModeOnMobile();
+    window.addEventListener('resize', fixDarkModeOnMobile);
+    
+    return () => {
+      window.removeEventListener('resize', fixDarkModeOnMobile);
+    };
+  }, []);
   
   // Get top gainers and losers
   const getTopGainers = () => {
