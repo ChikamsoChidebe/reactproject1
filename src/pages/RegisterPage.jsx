@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/api';
+import { userPersistenceManager } from '../utils/userPersistence';
 
 const RegisterPage = () => {
   const [name, setName] = useState('');

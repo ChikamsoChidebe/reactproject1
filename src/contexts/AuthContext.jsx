@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { userPersistenceManager } from '../utils/userPersistence';
 
 // Create context
 const AuthContext = createContext();
@@ -14,15 +15,12 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const checkAuth = () => {
       try {
-        // Clear any invalid data first
         const savedUserRaw = localStorage.getItem('user');
         
-        // Only try to parse if we have a non-empty string
         if (savedUserRaw && typeof savedUserRaw === 'string' && savedUserRaw !== 'undefined' && savedUserRaw.trim() !== '') {
           try {
             const parsedUser = JSON.parse(savedUserRaw);
             
-            // Validate that we have a proper user object
             if (parsedUser && typeof parsedUser === 'object' && parsedUser.email) {
               setCurrentUser(parsedUser);
               setIsAuthenticated(true);
@@ -36,7 +34,6 @@ export const AuthProvider = ({ children }) => {
             localStorage.removeItem('user');
           }
         } else {
-          // No valid user data
           if (savedUserRaw) {
             console.log('Removing invalid user data from localStorage');
             localStorage.removeItem('user');
@@ -50,9 +47,19 @@ export const AuthProvider = ({ children }) => {
       }
     };
     
-    // Run immediately without async
     checkAuth();
-  }, []);
+    
+    // Add periodic check to maintain authentication state
+    const interval = setInterval(() => {
+      const savedUserRaw = localStorage.getItem('user');
+      if (savedUserRaw && !currentUser) {
+        // Re-authenticate if user data exists but state is lost
+        checkAuth();
+      }
+    }, 10000); // Check every 10 seconds
+    
+    return () => clearInterval(interval);
+  }, [currentUser]);
 
   // Login function
   const login = async (email, password) => {
@@ -114,7 +121,7 @@ export const AuthProvider = ({ children }) => {
       }
       
       // Fallback to localStorage if API fails
-      const users = JSON.parse(localStorage.getItem('users') || '[]');
+      const users = userPersistenceManager.loadUsers();
       
       // Find user by email (case insensitive)
       const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
@@ -160,11 +167,24 @@ export const AuthProvider = ({ children }) => {
       }
       
       // Get existing users
-      const users = JSON.parse(localStorage.getItem('users') || '[]');
+      const users = userPersistenceManager.loadUsers();
       
       // Check if email is already in use (case insensitive)
       if (users.some(user => user.email.toLowerCase() === email.toLowerCase())) {
         throw new Error('Email is already in use');
+      }
+      
+      // Restore from backup if users array is empty but backup exists
+      if (users.length === 0) {
+        try {
+          const backupUsers = JSON.parse(localStorage.getItem('users_backup') || '[]');
+          if (backupUsers.length > 0) {
+            localStorage.setItem('users', JSON.stringify(backupUsers));
+            users.push(...backupUsers);
+          }
+        } catch (backupErr) {
+          console.error('Error restoring from backup:', backupErr);
+        }
       }
       
       // Create new user
@@ -180,9 +200,8 @@ export const AuthProvider = ({ children }) => {
         cashBalance: 0 // Initial balance is zero until admin approves
       };
       
-      // Save to users array
-      users.push(newUser);
-      localStorage.setItem('users', JSON.stringify(users));
+      // Save to users array with backup using persistence manager
+      userPersistenceManager.addUser(newUser);
       
       // Remove password from user object before storing in state
       const { password: _, ...userWithoutPassword } = newUser;

@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import AdminDashboardCharts from '../components/charts/AdminDashboardCharts';
 import { userService, transactionService, kycService } from '../services/api';
+import { userPersistenceManager } from '../utils/userPersistence';
 
 const AdminPage = () => {
   const { currentUser, setCurrentUser, setIsAuthenticated } = useAuth();
@@ -43,11 +44,36 @@ const AdminPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Load users directly from localStorage
+  // Initialize users immediately on component mount
+  useEffect(() => {
+    const initialUsers = userPersistenceManager.getNonAdminUsers();
+    setUsers(initialUsers);
+    console.log('Initial users loaded:', initialUsers.length);
+  }, []);
+
+  // Load users using persistence manager
   const loadLocalUsers = () => {
-    const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
-    return localUsers.filter(user => user.email !== 'admin@credox.com');
+    return userPersistenceManager.getNonAdminUsers();
   };
+
+  // Add periodic refresh to maintain user data
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Refresh users from localStorage every 30 seconds to ensure persistence
+      const localUsers = loadLocalUsers();
+      if (localUsers.length > 0) {
+        setUsers(prevUsers => {
+          // Only update if we have more users locally than in state
+          if (localUsers.length >= prevUsers.length) {
+            return localUsers;
+          }
+          return prevUsers;
+        });
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Check if user is admin
   useEffect(() => {
@@ -64,85 +90,92 @@ const AdminPage = () => {
       navigate('/dashboard');
     }
     
-    // Replace the fetchData function in useEffect with this:
-const fetchData = async () => {
-  setIsLoading(true);
-  
-  try {
-    // Always load local users first as a fallback
-    let localUsers = [];
-    try {
-      const usersData = localStorage.getItem('users');
-      if (usersData && usersData !== 'undefined') {
-        localUsers = JSON.parse(usersData);
-      }
-    } catch (parseErr) {
-      console.error("Error parsing users from localStorage:", parseErr);
-      localStorage.removeItem('users'); // Remove invalid data
-      localUsers = [];
-    }
-    
-    const filteredLocalUsers = localUsers.filter(user => user.email !== 'admin@credox.com');
-    
-    // Set users from localStorage immediately
-    setUsers(filteredLocalUsers);
-    
-    // Then try to fetch from API
-    console.log("Fetching users from API:", 'https://credoxbackend.onrender.com/api/users');
-    const response = await fetch('https://credoxbackend.onrender.com/api/users', {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      }
-    });
-    
-    if (response.ok) {
-      const apiUsers = await response.json();
-      console.log("Users from API direct fetch:", apiUsers);
+    const fetchData = async () => {
+      setIsLoading(true);
       
-      if (apiUsers && apiUsers.length > 0) {
-        // Update with API users if available
-        setUsers(apiUsers.filter(user => user.email !== 'admin@credox.com'));
+      try {
+        // Always load local users first using persistence manager
+        const filteredLocalUsers = userPersistenceManager.getNonAdminUsers();
+        
+        // Set users from localStorage immediately - this ensures users are always shown
+        setUsers(filteredLocalUsers);
+        
+        // Try to fetch from API but don't override if API fails or returns empty
+        try {
+          console.log("Fetching users from API:", 'https://credoxbackend.onrender.com/api/users');
+          const response = await fetch('https://credoxbackend.onrender.com/api/users', {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            }
+          });
+          
+          if (response.ok) {
+            const apiUsers = await response.json();
+            console.log("Users from API direct fetch:", apiUsers);
+            
+            // Only update if API returns valid users AND has more users than localStorage
+            if (apiUsers && Array.isArray(apiUsers) && apiUsers.length > 0) {
+              const filteredApiUsers = apiUsers.filter(user => user.email !== 'admin@credox.com');
+              // Only update if we have more users from API or if localStorage was empty
+              if (filteredApiUsers.length >= filteredLocalUsers.length) {
+                setUsers(filteredApiUsers);
+              }
+            }
+          } else {
+            console.error("API response not OK:", response.status);
+          }
+        } catch (apiErr) {
+          console.error("API fetch failed, keeping localStorage users:", apiErr);
+        }
+      
+        // Load other data
+        let localTransactions = [];
+        try {
+          const transactionsData = localStorage.getItem('pendingTransactions');
+          if (transactionsData && transactionsData !== 'undefined') {
+            localTransactions = JSON.parse(transactionsData);
+          }
+        } catch (parseErr) {
+          console.error("Error parsing transactions from localStorage:", parseErr);
+          localStorage.removeItem('pendingTransactions');
+        }
+        setPendingTransactions(localTransactions);
+        
+        let localKYC = [];
+        try {
+          const kycData = localStorage.getItem('pendingKYC');
+          if (kycData && kycData !== 'undefined') {
+            localKYC = JSON.parse(kycData);
+          }
+        } catch (parseErr) {
+          console.error("Error parsing KYC from localStorage:", parseErr);
+          localStorage.removeItem('pendingKYC');
+        }
+        setPendingKYC(localKYC);
+      } catch (err) {
+        console.error("Error in fetchData:", err);
+        setError("Failed to load data. Please try again.");
+      } finally {
+        setIsLoading(false);
       }
-    } else {
-      console.error("API response not OK:", response.status);
-    }
-  
-    // Load other data
-    let localTransactions = [];
-    try {
-      const transactionsData = localStorage.getItem('pendingTransactions');
-      if (transactionsData && transactionsData !== 'undefined') {
-        localTransactions = JSON.parse(transactionsData);
-      }
-    } catch (parseErr) {
-      console.error("Error parsing transactions from localStorage:", parseErr);
-      localStorage.removeItem('pendingTransactions');
-    }
-    setPendingTransactions(localTransactions);
-    
-    let localKYC = [];
-    try {
-      const kycData = localStorage.getItem('pendingKYC');
-      if (kycData && kycData !== 'undefined') {
-        localKYC = JSON.parse(kycData);
-      }
-    } catch (parseErr) {
-      console.error("Error parsing KYC from localStorage:", parseErr);
-      localStorage.removeItem('pendingKYC');
-    }
-    setPendingKYC(localKYC);
-  } catch (err) {
-    console.error("Error in fetchData:", err);
-    setError("Failed to load data. Please try again.");
-  } finally {
-    setIsLoading(false);
-  }
-};
+    };
 
     
     fetchData();
+    
+    // Listen for user data changes
+    const handleUserDataChange = () => {
+      const localUsers = loadLocalUsers();
+      setUsers(localUsers);
+    };
+    
+    window.addEventListener('userDataChanged', handleUserDataChange);
+    
+    return () => {
+      window.removeEventListener('userDataChanged', handleUserDataChange);
+    };
   }, [currentUser, navigate]);
 
   // Update the handleUpdateBalance function in AdminPage.jsx
@@ -489,7 +522,7 @@ const handleUpdateBalance = async () => {
     setError(null);
     
     try {
-      // Always load local users first as a fallback
+      // Always load local users first
       let localUsers = [];
       try {
         const usersData = localStorage.getItem('users');
@@ -498,34 +531,42 @@ const handleUpdateBalance = async () => {
         }
       } catch (parseErr) {
         console.error("Error parsing users from localStorage:", parseErr);
-        localStorage.removeItem('users'); // Remove invalid data
+        localStorage.removeItem('users');
       }
       
       const filteredLocalUsers = localUsers.filter(user => user.email !== 'admin@credox.com');
       
-      // Set users from localStorage immediately
+      // Set users from localStorage immediately - this ensures users are always shown
       setUsers(filteredLocalUsers);
       
-      // Then try to fetch from API directly
-      console.log("Fetching users from API (refresh):", 'https://credoxbackend.onrender.com/api/users');
-      const response = await fetch('https://credoxbackend.onrender.com/api/users', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        }
-      });
-      
-      if (response.ok) {
-        const apiUsers = await response.json();
-        console.log("Users from API direct fetch (refresh):", apiUsers);
+      // Try to fetch from API but don't override if API fails or returns empty
+      try {
+        console.log("Fetching users from API (refresh):", 'https://credoxbackend.onrender.com/api/users');
+        const response = await fetch('https://credoxbackend.onrender.com/api/users', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          }
+        });
         
-        if (apiUsers && apiUsers.length > 0) {
-          // Update with API users if available
-          setUsers(apiUsers.filter(user => user.email !== 'admin@credox.com'));
+        if (response.ok) {
+          const apiUsers = await response.json();
+          console.log("Users from API direct fetch (refresh):", apiUsers);
+          
+          // Only update if API returns valid users AND has more users than localStorage
+          if (apiUsers && Array.isArray(apiUsers) && apiUsers.length > 0) {
+            const filteredApiUsers = apiUsers.filter(user => user.email !== 'admin@credox.com');
+            // Only update if we have more users from API or if localStorage was empty
+            if (filteredApiUsers.length >= filteredLocalUsers.length) {
+              setUsers(filteredApiUsers);
+            }
+          }
+        } else {
+          console.error("API response not OK (refresh):", response.status);
         }
-      } else {
-        console.error("API response not OK (refresh):", response.status);
+      } catch (apiErr) {
+        console.error("API fetch failed, keeping localStorage users:", apiErr);
       }
       
       // Load other data
