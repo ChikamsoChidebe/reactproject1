@@ -1,1 +1,9 @@
+# SPA fallback rule
 /*    /index.html   200
+
+# API routes (if any)
+/api/*  https://credoxbackend.onrender.com/api/:splat  200
+
+# Static assets should be served directly
+/assets/*  /assets/:splat  200
+/favicon.ico  /favicon.ico  200
