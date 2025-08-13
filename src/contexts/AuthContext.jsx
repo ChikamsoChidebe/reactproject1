@@ -174,16 +174,27 @@ export const AuthProvider = ({ children }) => {
         throw new Error('Email is already in use');
       }
       
-      // Restore from backup if users array is empty but backup exists
+      // Enhanced backup restoration with multiple fallbacks
       if (users.length === 0) {
-        try {
-          const backupUsers = JSON.parse(localStorage.getItem('users_backup') || '[]');
-          if (backupUsers.length > 0) {
-            localStorage.setItem('users', JSON.stringify(backupUsers));
-            users.push(...backupUsers);
+        console.log('No users found, attempting comprehensive recovery...');
+        const backupKeys = ['users_backup', 'users_backup_2', 'users_backup_3'];
+        
+        for (const backupKey of backupKeys) {
+          try {
+            const backupData = localStorage.getItem(backupKey);
+            if (backupData && backupData !== 'undefined') {
+              const backupUsers = JSON.parse(backupData);
+              if (Array.isArray(backupUsers) && backupUsers.length > 0) {
+                console.log(`Restored ${backupUsers.length} users from ${backupKey}`);
+                userPersistenceManager.saveUsers(backupUsers);
+                users.push(...backupUsers);
+                break;
+              }
+            }
+          } catch (backupErr) {
+            console.error(`Error restoring from ${backupKey}:`, backupErr);
+            continue;
           }
-        } catch (backupErr) {
-          console.error('Error restoring from backup:', backupErr);
         }
       }
       
@@ -200,8 +211,17 @@ export const AuthProvider = ({ children }) => {
         cashBalance: 0 // Initial balance is zero until admin approves
       };
       
-      // Save to users array with backup using persistence manager
-      userPersistenceManager.addUser(newUser);
+      // Save to users array with enhanced persistence
+      const allUsers = userPersistenceManager.addUser(newUser);
+      console.log('User registered successfully. Total users:', allUsers.length);
+      
+      // Verify user was saved properly
+      const savedUsers = userPersistenceManager.loadUsers();
+      const userExists = savedUsers.find(u => u.email === newUser.email);
+      if (!userExists) {
+        console.error('User registration failed - user not found after save');
+        throw new Error('Registration failed - please try again');
+      }
       
       // Remove password from user object before storing in state
       const { password: _, ...userWithoutPassword } = newUser;
@@ -211,8 +231,49 @@ export const AuthProvider = ({ children }) => {
       setIsAuthenticated(true);
       localStorage.setItem('user', JSON.stringify(userWithoutPassword));
       
+      // Create additional backup of current user
+      localStorage.setItem('current_user_backup', JSON.stringify(userWithoutPassword));
+      
       // Dispatch a custom event to notify other components
       window.dispatchEvent(new Event('userDataChanged'));
+      
+      // Force immediate backup creation and verification
+      setTimeout(() => {
+        const verifyUsers = userPersistenceManager.loadUsers();
+        console.log('Post-registration verification: Total users =', verifyUsers.length);
+        
+        // Double-check the user exists
+        const userExists = verifyUsers.find(u => u.email === newUser.email);
+        if (!userExists) {
+          console.error('CRITICAL: User not found after registration!');
+          // Emergency re-save
+          const currentUsers = JSON.parse(localStorage.getItem('users') || '[]');
+          currentUsers.push(newUser);
+          userPersistenceManager.saveUsers(currentUsers);
+        }
+        
+        // Trigger monitoring system to update counts
+        if (window.userMonitor) {
+          window.userMonitor.updateUserCount();
+        }
+      }, 100);
+      
+      // Additional verification after 1 second
+      setTimeout(() => {
+        const finalVerification = userPersistenceManager.loadUsers();
+        const finalUserExists = finalVerification.find(u => u.email === newUser.email);
+        if (!finalUserExists) {
+          console.error('CRITICAL: User lost after registration! Attempting emergency recovery...');
+          // Last resort - save directly to all backup locations
+          const userData = JSON.stringify([...finalVerification, newUser]);
+          localStorage.setItem('users', userData);
+          localStorage.setItem('users_backup', userData);
+          localStorage.setItem('users_backup_2', userData);
+          localStorage.setItem('users_backup_3', userData);
+        } else {
+          console.log('Registration verification successful - user persisted');
+        }
+      }, 1000);
       
       setIsLoading(false);
       return userWithoutPassword;

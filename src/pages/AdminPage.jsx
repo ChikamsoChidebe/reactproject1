@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import AdminDashboardCharts from '../components/charts/AdminDashboardCharts';
 import { userService, transactionService, kycService } from '../services/api';
 import { userPersistenceManager } from '../utils/userPersistence';
+import { userMonitor } from '../utils/userMonitoring';
 
 const AdminPage = () => {
   const { currentUser, setCurrentUser, setIsAuthenticated } = useAuth();
@@ -44,11 +45,61 @@ const AdminPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Initialize users immediately on component mount
+  // Initialize users with comprehensive recovery system
   useEffect(() => {
-    const initialUsers = userPersistenceManager.getNonAdminUsers();
-    setUsers(initialUsers);
-    console.log('Initial users loaded:', initialUsers.length);
+    const initializeUsers = async () => {
+      console.log('Initializing users with recovery system...');
+      
+      // Step 1: Try primary persistence manager
+      let users = userPersistenceManager.getNonAdminUsers();
+      console.log('Step 1 - Users from persistence manager:', users.length);
+      
+      // Step 2: If no users, try comprehensive recovery
+      if (users.length === 0) {
+        console.log('Step 2 - No users found, attempting comprehensive recovery...');
+        
+        // Try all backup locations
+        const backupKeys = ['users', 'users_backup', 'users_backup_2', 'users_backup_3'];
+        for (const key of backupKeys) {
+          try {
+            const data = localStorage.getItem(key);
+            if (data && data !== 'undefined' && data !== 'null') {
+              const parsedUsers = JSON.parse(data);
+              if (Array.isArray(parsedUsers) && parsedUsers.length > 0) {
+                const nonAdminUsers = parsedUsers.filter(u => u && u.email && u.email !== 'admin@credox.com');
+                if (nonAdminUsers.length > 0) {
+                  users = nonAdminUsers;
+                  console.log(`Step 2 - Recovered ${users.length} users from ${key}`);
+                  // Save recovered users back to all locations
+                  userPersistenceManager.saveUsers(parsedUsers);
+                  break;
+                }
+              }
+            }
+          } catch (err) {
+            console.error(`Error recovering from ${key}:`, err);
+            continue;
+          }
+        }
+      }
+      
+      // Step 3: Set users in state
+      setUsers(users);
+      console.log('Step 3 - Final user count set in state:', users.length);
+      
+      // Step 4: If still no users, create a safety net
+      if (users.length === 0) {
+        console.log('Step 4 - Creating safety net for user recovery...');
+        // Check if there are any user-related items in localStorage that might indicate lost users
+        const allKeys = Object.keys(localStorage);
+        const userRelatedKeys = allKeys.filter(key => 
+          key.includes('user') || key.includes('User') || key.includes('account')
+        );
+        console.log('User-related localStorage keys found:', userRelatedKeys);
+      }
+    };
+    
+    initializeUsers();
   }, []);
 
   // Load users using persistence manager
@@ -56,21 +107,42 @@ const AdminPage = () => {
     return userPersistenceManager.getNonAdminUsers();
   };
 
-  // Add periodic refresh to maintain user data
+  // Enhanced periodic refresh with user protection
   useEffect(() => {
     const interval = setInterval(() => {
-      // Refresh users from localStorage every 30 seconds to ensure persistence
-      const localUsers = loadLocalUsers();
-      if (localUsers.length > 0) {
-        setUsers(prevUsers => {
-          // Only update if we have more users locally than in state
-          if (localUsers.length >= prevUsers.length) {
-            return localUsers;
-          }
+      console.log('Periodic user refresh starting...');
+      
+      // Get current users from state
+      setUsers(prevUsers => {
+        const currentCount = prevUsers.length;
+        
+        // Load from localStorage
+        const localUsers = loadLocalUsers();
+        const localCount = localUsers.length;
+        
+        console.log(`Periodic refresh: State=${currentCount}, Local=${localCount}`);
+        
+        // NEVER reduce user count - always keep the higher number
+        if (localCount > currentCount) {
+          console.log('Using localStorage users (more users found)');
+          return localUsers;
+        } else if (currentCount > localCount && currentCount > 0) {
+          console.log('Preserving state users (more users in state)');
+          // Save state users back to localStorage to prevent loss
+          const allUsers = userPersistenceManager.loadUsers();
+          const adminUsers = allUsers.filter(u => u.email === 'admin@credox.com');
+          const combinedUsers = [...adminUsers, ...prevUsers];
+          userPersistenceManager.saveUsers(combinedUsers);
           return prevUsers;
-        });
-      }
-    }, 30000); // 30 seconds
+        } else if (localCount > 0) {
+          console.log('Using localStorage users (same or fallback)');
+          return localUsers;
+        } else {
+          console.log('Keeping existing state (no local users)');
+          return prevUsers;
+        }
+      });
+    }, 15000); // Every 15 seconds for more frequent protection
 
     return () => clearInterval(interval);
   }, []);
@@ -94,40 +166,48 @@ const AdminPage = () => {
       setIsLoading(true);
       
       try {
-        // Always load local users first using persistence manager
+        // Always prioritize localStorage users - NEVER override with API data
         const filteredLocalUsers = userPersistenceManager.getNonAdminUsers();
         
-        // Set users from localStorage immediately - this ensures users are always shown
+        // Set users from localStorage - this is the source of truth
         setUsers(filteredLocalUsers);
+        console.log('Users loaded from localStorage:', filteredLocalUsers.length);
         
-        // Try to fetch from API but don't override if API fails or returns empty
-        try {
-          console.log("Fetching users from API:", 'https://credoxbackend.onrender.com/api/users');
-          const response = await fetch('https://credoxbackend.onrender.com/api/users', {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            }
-          });
-          
-          if (response.ok) {
-            const apiUsers = await response.json();
-            console.log("Users from API direct fetch:", apiUsers);
-            
-            // Only update if API returns valid users AND has more users than localStorage
-            if (apiUsers && Array.isArray(apiUsers) && apiUsers.length > 0) {
-              const filteredApiUsers = apiUsers.filter(user => user.email !== 'admin@credox.com');
-              // Only update if we have more users from API or if localStorage was empty
-              if (filteredApiUsers.length >= filteredLocalUsers.length) {
-                setUsers(filteredApiUsers);
-              }
-            }
+        // If no local users, try recovery before API
+        if (filteredLocalUsers.length === 0) {
+          console.log('No local users found, attempting recovery...');
+          const recoveredUsers = userPersistenceManager.loadUsers().filter(u => u.email !== 'admin@credox.com');
+          if (recoveredUsers.length > 0) {
+            setUsers(recoveredUsers);
+            console.log('Users recovered from backup:', recoveredUsers.length);
           } else {
-            console.error("API response not OK:", response.status);
+            // Only try API if we have absolutely no local data
+            try {
+              console.log("No local data found, trying API as last resort:");
+              const response = await fetch('https://credoxbackend.onrender.com/api/users', {
+                method: 'GET',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json'
+                }
+              });
+              
+              if (response.ok) {
+                const apiUsers = await response.json();
+                if (apiUsers && Array.isArray(apiUsers) && apiUsers.length > 0) {
+                  const filteredApiUsers = apiUsers.filter(user => user.email !== 'admin@credox.com');
+                  if (filteredApiUsers.length > 0) {
+                    setUsers(filteredApiUsers);
+                    // Save API users to localStorage for future use
+                    userPersistenceManager.saveUsers([...filteredApiUsers]);
+                    console.log('Users loaded from API and saved locally:', filteredApiUsers.length);
+                  }
+                }
+              }
+            } catch (apiErr) {
+              console.error("API fetch failed:", apiErr);
+            }
           }
-        } catch (apiErr) {
-          console.error("API fetch failed, keeping localStorage users:", apiErr);
         }
       
         // Load other data
@@ -165,16 +245,25 @@ const AdminPage = () => {
     
     fetchData();
     
-    // Listen for user data changes
+    // Listen for user data changes and recovery events
     const handleUserDataChange = () => {
       const localUsers = loadLocalUsers();
       setUsers(localUsers);
     };
     
+    const handleUsersRecovered = (event) => {
+      console.log('Users recovered event received:', event.detail);
+      const recoveredUsers = userPersistenceManager.getNonAdminUsers();
+      setUsers(recoveredUsers);
+      setError(null); // Clear any errors
+    };
+    
     window.addEventListener('userDataChanged', handleUserDataChange);
+    window.addEventListener('usersRecovered', handleUsersRecovered);
     
     return () => {
       window.removeEventListener('userDataChanged', handleUserDataChange);
+      window.removeEventListener('usersRecovered', handleUsersRecovered);
     };
   }, [currentUser, navigate]);
 
@@ -522,52 +611,48 @@ const handleUpdateBalance = async () => {
     setError(null);
     
     try {
-      // Always load local users first
-      let localUsers = [];
-      try {
-        const usersData = localStorage.getItem('users');
-        if (usersData && usersData !== 'undefined') {
-          localUsers = JSON.parse(usersData);
-        }
-      } catch (parseErr) {
-        console.error("Error parsing users from localStorage:", parseErr);
-        localStorage.removeItem('users');
-      }
+      console.log('Manual refresh initiated...');
       
-      const filteredLocalUsers = localUsers.filter(user => user.email !== 'admin@credox.com');
+      // Get current user count before refresh
+      const currentUserCount = users.length;
+      console.log('Current users in state:', currentUserCount);
       
-      // Set users from localStorage immediately - this ensures users are always shown
-      setUsers(filteredLocalUsers);
+      // Comprehensive user recovery
+      let recoveredUsers = [];
+      const backupKeys = ['users', 'users_backup', 'users_backup_2', 'users_backup_3'];
       
-      // Try to fetch from API but don't override if API fails or returns empty
-      try {
-        console.log("Fetching users from API (refresh):", 'https://credoxbackend.onrender.com/api/users');
-        const response = await fetch('https://credoxbackend.onrender.com/api/users', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          }
-        });
-        
-        if (response.ok) {
-          const apiUsers = await response.json();
-          console.log("Users from API direct fetch (refresh):", apiUsers);
-          
-          // Only update if API returns valid users AND has more users than localStorage
-          if (apiUsers && Array.isArray(apiUsers) && apiUsers.length > 0) {
-            const filteredApiUsers = apiUsers.filter(user => user.email !== 'admin@credox.com');
-            // Only update if we have more users from API or if localStorage was empty
-            if (filteredApiUsers.length >= filteredLocalUsers.length) {
-              setUsers(filteredApiUsers);
+      for (const key of backupKeys) {
+        try {
+          const data = localStorage.getItem(key);
+          if (data && data !== 'undefined' && data !== 'null') {
+            const parsedUsers = JSON.parse(data);
+            if (Array.isArray(parsedUsers)) {
+              const nonAdminUsers = parsedUsers.filter(u => u && u.email && u.email !== 'admin@credox.com');
+              if (nonAdminUsers.length > recoveredUsers.length) {
+                recoveredUsers = nonAdminUsers;
+                console.log(`Refresh: Found ${nonAdminUsers.length} users in ${key}`);
+              }
             }
           }
-        } else {
-          console.error("API response not OK (refresh):", response.status);
+        } catch (parseErr) {
+          console.error(`Error parsing ${key}:`, parseErr);
+          continue;
         }
-      } catch (apiErr) {
-        console.error("API fetch failed, keeping localStorage users:", apiErr);
       }
+      
+      // Use the highest count between current state and recovered users
+      const finalUsers = recoveredUsers.length >= currentUserCount ? recoveredUsers : users;
+      setUsers(finalUsers);
+      
+      // If we found more users, save them to ensure persistence
+      if (finalUsers.length > 0) {
+        const allUsers = userPersistenceManager.loadUsers();
+        const adminUsers = allUsers.filter(u => u.email === 'admin@credox.com');
+        const combinedUsers = [...adminUsers, ...finalUsers];
+        userPersistenceManager.saveUsers(combinedUsers);
+      }
+      
+      console.log(`Refresh completed: ${finalUsers.length} users loaded`);
       
       // Load other data
       let localTransactions = [];
@@ -617,16 +702,37 @@ const handleUpdateBalance = async () => {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-        <button 
-          onClick={handleRefresh}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded flex items-center"
-        >
-          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-          </svg>
-          Refresh Data
-        </button>
+        <div>
+          <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+          <div className="text-sm text-gray-600 mt-1">
+            Users: {users.length} | Monitoring: {userMonitor.getStatus().isMonitoring ? '✅ Active' : '❌ Inactive'}
+          </div>
+        </div>
+        <div className="flex space-x-2">
+          <button 
+            onClick={() => {
+              console.log('Force recovery initiated by admin');
+              userMonitor.forceRecovery();
+              setTimeout(() => {
+                const recoveredUsers = userPersistenceManager.getNonAdminUsers();
+                setUsers(recoveredUsers);
+                console.log('Manual recovery completed:', recoveredUsers.length);
+              }, 1000);
+            }}
+            className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded flex items-center"
+          >
+            🔧 Force Recovery
+          </button>
+          <button 
+            onClick={handleRefresh}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded flex items-center"
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            </svg>
+            Refresh Data
+          </button>
+        </div>
       </div>
       
       {error && (
@@ -866,7 +972,24 @@ const handleUpdateBalance = async () => {
                     ) : (
                       <tr>
                         <td colSpan="4" className="px-4 py-3 text-center text-gray-500">
-                          No users found. Try refreshing the page.
+                          <div className="space-y-2">
+                            <p>No users found.</p>
+                            <button 
+                              onClick={() => {
+                                console.log('Attempting emergency user recovery...');
+                                const recoveredUsers = userPersistenceManager.loadUsers().filter(u => u.email !== 'admin@credox.com');
+                                if (recoveredUsers.length > 0) {
+                                  setUsers(recoveredUsers);
+                                  console.log('Emergency recovery successful:', recoveredUsers.length);
+                                } else {
+                                  console.log('No users found in any backup location');
+                                }
+                              }}
+                              className="text-blue-600 hover:text-blue-800 underline"
+                            >
+                              Try Emergency Recovery
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     )}

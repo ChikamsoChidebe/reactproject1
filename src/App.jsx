@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { MarketDataProvider } from './contexts/MarketDataContext';
 import { TradingProvider } from './contexts/TradingContext';
 import { NotificationProvider } from './contexts/NotificationContext';
+import { userMonitor } from './utils/userMonitoring';
 import TestApiPage from './pages/TestApiPage';
 
 // Import pages
@@ -88,6 +89,17 @@ const AdminRoute = ({ children }) => {
 };
 
 function App() {
+  // Initialize user monitoring
+  useEffect(() => {
+    console.log('Initializing user monitoring system...');
+    userMonitor.startMonitoring();
+    
+    // Cleanup on unmount
+    return () => {
+      userMonitor.stopMonitoring();
+    };
+  }, []);
+  
   return (
     <Router basename={import.meta.env.BASE_URL || '/'}>
       <AuthProvider>
